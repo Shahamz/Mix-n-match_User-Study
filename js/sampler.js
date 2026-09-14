@@ -1,28 +1,33 @@
 /* ---------------------------------------------------------------------------
  * Draws one participant's session out of the item bank.
  *
- * The draw is seeded from the participant id, so a refresh mid-study rebuilds
- * exactly the same sequence rather than starting a different one.
+ * Every item in the bank is the same question: our composite against one
+ * baseline's, judged on three criteria. The draw picks which comparisons this
+ * participant gets, spread across configs and balanced across the baselines,
+ * and decides which picture is shown as A and which as B.
+ *
+ * Seeded from the participant id, so a refresh mid-study rebuilds the same
+ * sequence rather than starting a different one.
  * ------------------------------------------------------------------------- */
 
 (function () {
   "use strict";
 
   function seedFrom(text) {
-    let hash = 0x811c9dc5;
-    for (let i = 0; i < text.length; i += 1) {
+    var hash = 0x811c9dc5;
+    for (var i = 0; i < text.length; i += 1) {
       hash ^= text.charCodeAt(i);
       hash = Math.imul(hash, 0x01000193) >>> 0;
     }
     return hash >>> 0;
   }
 
-  /* mulberry32: small, fast, and good enough for shuffling a questionnaire. */
+  /* mulberry32: small, fast, good enough for shuffling a questionnaire. */
   function makeRandom(seed) {
-    let state = seed >>> 0;
+    var state = seed >>> 0;
     return function random() {
       state = (state + 0x6d2b79f5) >>> 0;
-      let t = state;
+      var t = state;
       t = Math.imul(t ^ (t >>> 15), t | 1);
       t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -30,107 +35,87 @@
   }
 
   function shuffled(list, random) {
-    const copy = list.slice();
-    for (let i = copy.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
+    var copy = list.slice();
+    for (var i = copy.length - 1; i > 0; i -= 1) {
+      var j = Math.floor(random() * (i + 1));
+      var swap = copy[i]; copy[i] = copy[j]; copy[j] = swap;
     }
     return copy;
   }
 
-  /* Prefer items from configs this participant has not seen yet, so a session
-     spreads over many prompts instead of hammering one. */
-  function takeSpread(pool, wanted, seenConfigs, random) {
-    const picked = [];
-    const remaining = shuffled(pool, random);
-    while (picked.length < wanted && remaining.length) {
-      let index = remaining.findIndex(function (item) { return !seenConfigs.has(item.config); });
-      if (index === -1) {
-        /* Every config is spoken for; start a fresh pass so later question types
-           spread over the configs too instead of clustering. */
-        seenConfigs.clear();
-        index = remaining.findIndex(function (item) { return !seenConfigs.has(item.config); });
-        if (index === -1) index = 0;
-      }
-      const item = remaining.splice(index, 1)[0];
-      seenConfigs.add(item.config);
-      picked.push(item);
+  /* Which baseline an item compares against — the option that is not ours. */
+  function opponentOf(item, reference) {
+    for (var i = 0; i < item.options.length; i += 1) {
+      if (item.options[i].m !== reference) return item.options[i].m;
     }
-    return picked;
-  }
-
-  /* Spread the attention checks through the run and avoid two questions about
-     the same config landing back to back. */
-  function arrange(scored, attention, random) {
-    const order = shuffled(scored, random);
-    for (let i = 1; i < order.length; i += 1) {
-      if (order[i].config !== order[i - 1].config) continue;
-      const swap = order.findIndex(function (item, j) {
-        return j > i && item.config !== order[i - 1].config;
-      });
-      if (swap !== -1) [order[i], order[swap]] = [order[swap], order[i]];
-    }
-    attention.forEach(function (check, index) {
-      const span = Math.floor(order.length / (attention.length + 1));
-      const at = Math.min(order.length, span * (index + 1) + index);
-      order.splice(at, 0, check);
-    });
-    return order;
+    return "?";
   }
 
   window.buildSession = function buildSession(manifest, participantId) {
-    const random = makeRandom(seedFrom(participantId));
-    const session = manifest.session || {};
-    const target = session.items_per_participant || 30;
-    const composition = session.composition || {};
+    var random = makeRandom(seedFrom(participantId));
+    var session = manifest.session || {};
+    var target = Math.min(session.items_per_participant || 30, manifest.items.length);
+    var reference = manifest.reference_code || "M1";
 
-    const byType = {};
+    /* Group by baseline so the three comparisons get equal airtime, then take
+       from each in turn, preferring configs this participant has not seen. */
+    var byOpponent = {};
     manifest.items.forEach(function (item) {
-      (byType[item.type] = byType[item.type] || []).push(item);
+      var key = opponentOf(item, reference);
+      (byOpponent[key] = byOpponent[key] || []).push(item);
+    });
+    Object.keys(byOpponent).forEach(function (key) {
+      byOpponent[key] = shuffled(byOpponent[key], random);
     });
 
-    const seenConfigs = new Set();
-    const chosen = [];
-    const used = new Set();
+    var order = shuffled(Object.keys(byOpponent), random);
+    var seen = {};
+    var chosen = [];
+    var used = {};
+    var guard = 0;
 
-    Object.keys(composition).forEach(function (type) {
-      const pool = (byType[type] || []).filter(function (item) { return !used.has(item.id); });
-      takeSpread(pool, composition[type], seenConfigs, random).forEach(function (item) {
-        used.add(item.id);
-        chosen.push(item);
-      });
-    });
-
-    /* If a type ran short (a small item bank, or a baseline missing from this
-       build), backfill with anything else rather than serving a short session. */
-    if (chosen.length < target) {
-      const rest = manifest.items.filter(function (item) {
-        return !used.has(item.id) && item.type !== "attention";
-      });
-      takeSpread(rest, target - chosen.length, seenConfigs, random).forEach(function (item) {
-        used.add(item.id);
-        chosen.push(item);
-      });
+    while (chosen.length < target && guard < 10000) {
+      guard += 1;
+      var progressed = false;
+      for (var k = 0; k < order.length && chosen.length < target; k += 1) {
+        var pool = byOpponent[order[k]];
+        var pick = -1;
+        for (var i = 0; i < pool.length; i += 1) {
+          if (!used[pool[i].id] && !seen[pool[i].config]) { pick = i; break; }
+        }
+        if (pick === -1) {
+          for (var j = 0; j < pool.length; j += 1) {
+            if (!used[pool[j].id]) { pick = j; break; }
+          }
+        }
+        if (pick === -1) continue;
+        used[pool[pick].id] = true;
+        seen[pool[pick].config] = true;
+        chosen.push(pool[pick]);
+        progressed = true;
+      }
+      if (!progressed) break;
+      /* Once every config has been drawn from, start a fresh pass. */
+      if (chosen.length % Object.keys(seen).length === 0) seen = {};
     }
 
-    const attention = chosen.filter(function (item) { return item.type === "attention"; });
-    const scored = chosen.filter(function (item) { return item.type !== "attention"; })
-      .slice(0, Math.max(0, target - attention.length));
-
-    /* One unscored warm-up, shown inside the instructions. */
-    const practicePool = (byType.tile_ab_adherence || []).filter(function (item) {
-      return !scored.some(function (other) { return other.id === item.id; });
-    });
-    const practice = practicePool.length
-      ? practicePool[Math.floor(random() * practicePool.length)]
-      : null;
+    /* Avoid two questions about the same config back to back. */
+    var run = shuffled(chosen, random);
+    for (var m = 1; m < run.length; m += 1) {
+      if (run[m].config !== run[m - 1].config) continue;
+      for (var n = m + 1; n < run.length; n += 1) {
+        if (run[n].config !== run[m - 1].config) {
+          var hold = run[m]; run[m] = run[n]; run[n] = hold;
+          break;
+        }
+      }
+    }
 
     return {
-      practice: practice,
-      items: arrange(scored, attention, random).map(function (item) {
-        /* Randomise which side each picture appears on, per participant. */
-        const order = shuffled(item.options.map(function (_, i) { return i; }), random);
-        return { item: item, order: order };
+      items: run.map(function (item) {
+        /* Which option is shown as A and which as B, per participant, so neither
+           method sits on a fixed side. order[0] is A, order[1] is B. */
+        return { item: item, order: shuffled([0, 1], random) };
       })
     };
   };

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Picture comparison study</title>
-<meta name="description" content="A short, anonymous study comparing ways of drawing one picture from several written descriptions.">
+<meta name="description" content="A short, anonymous study comparing ways of building one picture from several written descriptions.">
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,8 +24,8 @@
 <div class="panel" id="preview-banner" style="padding-block:14px 0" hidden>
   <div class="status status--warn">
     <p class="status__title">Preview build</p>
-    <p class="note" style="margin:0">These pictures are placeholders from the test
-      fixture, not real results. Rebuild from the real outputs before sharing this link.</p>
+    <p class="note" style="margin:0">These pictures are placeholders from the test fixture,
+      not real results. Rebuild from the real outputs before sharing this link.</p>
   </div>
 </div>
 
@@ -39,30 +39,31 @@
 
     <div id="welcome-body" hidden>
       <p class="eyebrow">Research study &middot; about 10 minutes</p>
-      <h1>Which picture works better?</h1>
+      <h1>Which image works better?</h1>
       <p class="lede">
-        We are testing ways of getting a computer to draw a single picture from several
-        separate written descriptions &mdash; one for the sky, another for what sits
-        underneath it, and so on.
+        You will compare pairs of AI-generated images across
+        <span id="question-count">30</span> questions. For each pair, choose which image
+        better matches each of three criteria &mdash; or call it a tie.
       </p>
       <p>
-        Different methods join those pieces together in different ways, and the only
-        real test is whether the result looks right to a person. So we would like your
-        eye. You will see pictures side by side and choose the one that works better.
-        There are no right answers and nothing is being tested about you.
+        Every image here was built from several separate written descriptions, one for each
+        part of the scene, and then assembled into a single picture. Different methods do
+        that assembly differently. Your job is to say which result works better.
       </p>
 
+      <h2>The three criteria</h2>
+      <dl class="defs" id="criteria-defs"></dl>
+
       <dl class="facts">
-        <div><dt>Questions</dt><dd><span id="question-count">30</span>, one screen each</dd></div>
-        <div><dt>Time</dt><dd><span id="minutes">about 10 minutes</span></dd></div>
+        <div><dt>Time</dt><dd>About 10 minutes</dd></div>
         <div><dt>Anonymous</dt><dd>No name, email, sign-in or tracking</dd></div>
         <div><dt>What we keep</dt><dd>Your choices, how long each took, and your browser type</dd></div>
       </dl>
 
       <p class="note">
-        Taking part is voluntary and you can close the tab at any point. The answers are
-        used only to evaluate these methods in academic research, and are reported as
-        totals, never individually.
+        Taking part is voluntary and you can close the tab at any point. Answers are used
+        only to evaluate these methods in academic research, and are reported as totals,
+        never individually. There are no right answers &mdash; go with your first impression.
       </p>
       <p class="note" id="contact" hidden>Questions? Write to <a href="#">the researcher</a>.</p>
 
@@ -75,48 +76,8 @@
       </div>
 
       <div class="actions">
-        <button class="btn" id="to-instructions" type="button">I agree &mdash; show me how it works</button>
+        <button class="btn" id="to-run" type="button">Start</button>
       </div>
-    </div>
-  </section>
-
-  <!-- ------------------------------------------------------- instructions -->
-  <section class="panel panel--wide" id="screen-instructions" hidden>
-    <p class="eyebrow">How to answer</p>
-    <h1>Go with your first impression</h1>
-    <p>
-      Each screen asks one short question, shows a description, and gives you two
-      pictures &mdash; occasionally four. Pick the one that answers the question better.
-      A few seconds per screen is exactly right; deliberating rarely helps.
-    </p>
-
-    <dl class="facts">
-      <div>
-        <dt>Whole or part</dt>
-        <dd>Some questions show a complete picture. Others show a single part of one,
-            and a small diagram beside the description marks which part.</dd>
-      </div>
-      <div>
-        <dt>Shapes differ</dt>
-        <dd>Pictures in a pair are often different shapes or sizes. That comes from how
-            each method works, not from a mistake. Judge what is in them.</dd>
-      </div>
-      <div>
-        <dt>Four pictures</dt>
-        <dd>Now and then you will pick the best of four, then the worst of the rest.</dd>
-      </div>
-      <div>
-        <dt>Keyboard</dt>
-        <dd>A and B, or the arrow keys. Number keys 1 to 4 when there are four.</dd>
-      </div>
-    </dl>
-
-    <h2>Try one</h2>
-    <p class="note">This practice question is not counted.</p>
-    <div id="practice"></div>
-
-    <div class="actions" id="practice-done" hidden>
-      <button class="btn" id="to-run" type="button">Start the questions</button>
     </div>
   </section>
 
@@ -162,9 +123,9 @@
     <p class="eyebrow">Finished</p>
     <h1>Thank you &mdash; genuinely.</h1>
     <p class="lede">
-      Judgements like yours are the only way to tell whether this actually looks better
-      to people, rather than merely scoring better on a metric. You have just done the
-      part that no benchmark can do.
+      Judgements like yours are the only way to tell whether this actually looks better to
+      people, rather than merely scoring better on a metric. You have just done the part
+      that no benchmark can do.
     </p>
 
     <div class="status" id="submit-status">
@@ -176,16 +137,16 @@
     </div>
 
     <p class="note">
-      Your answers carry no name, email or account, and are reported only as totals
-      across everyone who took part.
+      Your answers carry no name, email or account, and are reported only as totals across
+      everyone who took part.
     </p>
   </section>
 
 </main>
 
 <footer>
-  An academic user study. Pictures were generated by several research methods and are
-  shown unlabelled so that the comparison stays fair.
+  An academic user study. Images were generated by several research methods and are shown
+  unlabelled so that the comparison stays fair.
 </footer>
 
 <script src="js/config.js"></script>

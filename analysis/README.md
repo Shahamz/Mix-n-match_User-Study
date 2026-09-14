@@ -34,34 +34,46 @@ Output lands in `analysis/out/`: `summary.md` (read this), `results.csv`,
 **Fix this before collecting data.** Everything below is what makes the primary
 p-values interpretable; adding tests afterwards and reporting the best one does not.
 
+### The question every participant answers
+
+One format, thirty times: our assembled image against one randomly chosen baseline's,
+judged on three criteria — **overall quality**, **seamlessness**, **prompt alignment** —
+each answered *A wins* / *Tie* / *B wins*. Which method is shown as A is randomised per
+participant.
+
 ### Primary hypothesis
 
-Mix-n-match is preferred to each of the three baselines more often than chance, at
-both question levels.
+Mix-n-match is preferred to each of the three baselines more often than chance, on each
+of the three criteria.
 
-### Primary family — 6 tests, Holm-adjusted
+### Primary family — 9 tests, Holm-adjusted
 
-The reference method's win rate against each of `mnm_baseline`,
-`regional_prompting` and `tiled_diffusion`, separately for single-region and
-whole-image questions. Exact two-sided binomial test against 0.5, Wilson 95%
-intervals, Holm–Bonferroni across the six.
+Three baselines × three criteria. Exact two-sided binomial test against 0.5 on the
+**decided** judgements, Wilson 95% intervals, Holm–Bonferroni across the nine.
 
-Everything else — the per-question breakdown, subgroup effects, the ranking,
-agreement — is **exploratory**, reported with Benjamini–Hochberg q-values, and
-must be described as such.
+**Ties are dropped, not split.** A tie says the two images were indistinguishable on
+that criterion, not that one won half of the time; splitting invents comparisons nobody
+made. The tie rate is reported next to every cell, and a high one is itself a finding.
+
+Everything else — the pooled-by-criterion table, the McNemar contrasts, the ranking,
+agreement, subgroup effects — is **exploratory**, reported with Benjamini–Hochberg
+q-values, and must be described as such.
 
 ### Exclusions, decided in advance
 
-A participant is dropped if they fail any attention check, if their median answer
-time is under 800 ms, or if they choose the same side on more than 90% of at least
-ten questions. `--keep-excluded` reruns everything without these rules; report both
-if the conclusion changes.
+There are no attention checks: with a single question format there is nowhere to hide
+one. A participant is dropped if their median time per image pair is under 1.5 seconds
+(three criteria cannot be judged faster than that), if they choose the same side on more
+than 95% of at least fifteen decided judgements, or if they give the identical answer to
+every single criterion across a full session. `--keep-excluded` reruns everything
+without these rules; report both if the conclusion changes.
 
 ### Target sample
 
-For a true win rate of 0.60, 80% power at α = 0.05 needs ≈194 judgements per
-comparison. Each participant contributes roughly 3 judgements per comparison, so
-plan for **at least 65 completed sessions**; `summary.md` prints the full table.
+For a true win rate of 0.60, 80% power at α = 0.05 needs ≈194 decided judgements per
+cell. Each participant contributes roughly 10 pairs per baseline × 3 criteria, minus
+ties, so plan for **at least 25–30 completed sessions**; `summary.md` prints the full
+table.
 
 ---
 
@@ -70,33 +82,34 @@ plan for **at least 65 completed sessions**; `summary.md` prints the full table.
 | Section | What it answers |
 |---|---|
 | Who is in the analysis | Sample size, exclusions and why |
-| Primary | The pre-registered win rates, Holm-adjusted |
-| By the exact question | Does the advantage come from prompt match, coherence, or plain image quality |
-| Paired contrasts (McNemar) | Does the advantage over one baseline differ from the advantage over another, paired by picture content and again by person; and whether whole-image wins differ between the coherence and prompt-match questions |
-| Overall ranking | Bradley–Terry over every pairwise judgement, four-way answers expanded into the pairs they imply, bootstrap intervals |
-| Best–worst counting scores | The simple `(best − worst) / shown` score, as a check that the model agrees with the raw counts |
+| Primary | The nine pre-registered win rates, Holm-adjusted, with tie rates |
+| Pooled over the three baselines | Where the advantage is largest across criteria |
+| Paired contrasts (McNemar) | **The strongest evidence here.** All three criteria are answered on the *same* pair of images by the *same* person, so they are exactly paired: this asks whether the advantage on seamlessness really differs from the advantage on prompt alignment. Also, paired by config and by participant, whether the advantage over one baseline differs from another |
+| Overall ranking | Bradley–Terry over every decided judgement, bootstrap intervals |
 | Bias checks | Side bias from the display, and whether the advantage drifts as a session wears on |
-| Agreement | Krippendorff's α and Fleiss' κ. Low agreement here is a finding, not a failure: it means the methods are close |
+| Agreement | Krippendorff's α and Fleiss' κ over win/loss/tie. Low agreement here is a finding, not a failure: it means the methods are close |
 | Exploratory breakdowns | Static vs dynamic cropping, number of regions, options per region, self-reported familiarity, device |
 | Clustered logistic model | GEE with an exchangeable working correlation, clustered by participant. statsmodels has no frequentist binomial GLMM, which is why this is GEE rather than a mixed model |
-| Power | Judgements needed per comparison at several true effect sizes |
+| Power | Decided judgements needed per cell at several true effect sizes |
 
 ## Caveats to carry into the write-up
 
-- **Tiled Diffusion composites are a reconstruction.** It emits whole 1024² images
-  per region and constrains seams along a vertical chain; the build script cuts the
-  config's rectangle out of each and pastes it back. That is faithful where the
-  config's crops are full-width bands stacked top to bottom, and the build tags
-  every composite item with `stitch_faithful`. Items are only produced for layouts
-  where it holds unless `allow_approximate_stitching` is turned on.
+- **Tiled Diffusion images are a faithful reconstruction, at a different aspect
+  ratio.** Its composite is rebuilt exactly as `crop_output.compose_combination`
+  builds it, from `tiles/` plus the placement recorded in `run_meta.json`. Because
+  it generates every region as a 1024² square and chains them vertically, its image
+  is `1024 × 1024·n` — taller than our square canvas. Both images in a pair are shown
+  at the same width, so its greater height is visible to the participant. Whether
+  that aspect difference influenced judgements is worth acknowledging.
+- **The naive baseline's images contain black areas on some configs.** It is
+  assembled from the config's crop rectangles, and on 44 of the 50 dynamic configs
+  those rectangles do not tile the canvas (median 48% uncovered). The baseline
+  generates no background image, so that area is black. This is a real property of
+  the method, not missing data, but it is conspicuous and will have influenced the
+  seamlessness judgements in particular. The `cropping set` breakdown separates it.
 - **Regions are not pixel-identical across methods.** Mix-n-match solves its own
   regions with `MRF_alpha`; the baselines use the config's rectangles. A pair is
-  matched on *the description being illustrated*, not on identical geometry, and
-  participants are told to judge content rather than outline.
-- **The naive baseline cannot be composited where the config's rectangles leave
-  gaps**, because it generates no background image. Those items are skipped, so its
-  whole-image comparisons come from a narrower set of configs than the others. The
-  counts in the primary table show this.
+  matched on *the set of descriptions being illustrated*, not on identical geometry.
 
 ## Files
 

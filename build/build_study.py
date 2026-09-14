@@ -38,6 +38,11 @@ import yaml
 from PIL import Image
 
 PATCH = 16                  # Mix_n_match/macros.py: PATCH_SIZE_PIXELS
+
+# tiled-diffusion/crop_output.py: UNCOVERED_COLOUR. Reused for the naive baseline,
+# whose config rectangles do not always tile the canvas and which generates no
+# background image to fill what they leave.
+UNCOVERED = (0, 0, 0)
 SETS = ("static", "dynamic")
 REFERENCE = "mix_n_match"
 BASELINES = ("mnm_baseline", "regional_prompting", "tiled_diffusion")
@@ -338,15 +343,19 @@ def render_composite(entry, method, combination, mat):
     """
     One whole image per method, using the same tile index per crop for all of them.
 
-    mix_n_match        pastes each region tile at its own bounding box through its alpha
-    regional_prompting pastes its background region, then each config rectangle on top
-    mnm_baseline       cuts each config rectangle out of that prompt's whole-canvas image
-    tiled_diffusion    the same cut-and-paste; only faithful for a vertical-band layout
+    mix_n_match         pastes each region tile at its own bounding box through its alpha
+    regional_prompting  pastes its background region, then each config rectangle on top
+    mnm_baseline        resizes each whole-canvas image into its config rectangle and
+                        pastes it at that rectangle's (x, y); whatever the rectangles
+                        leave uncovered stays black, because the baseline generates no
+                        background image
+    tiled_diffusion     reproduces crop_output.compose_combination exactly, from
+                        run_meta.json: its own canvas, each tile at its placed box
     """
     width, height = entry.size
-    canvas = Image.new("RGB", (width, height), mat)
 
     if method == REFERENCE:
+        canvas = Image.new("RGB", (width, height), mat)
         background = background_index(entry)
         for crop_index, region in enumerate(entry.regions):
             if region is None:
@@ -360,6 +369,7 @@ def render_composite(entry, method, combination, mat):
         return canvas
 
     if method == "regional_prompting":
+        canvas = Image.new("RGB", (width, height), UNCOVERED)
         folder = regional_background(entry)
         if folder is not None:
             path = folder / f"tile{combination[0]}.png"
@@ -377,33 +387,81 @@ def render_composite(entry, method, combination, mat):
             canvas.paste(open_rgba(source).convert("RGB"), (crop["x"], crop["y"]))
         return canvas
 
-    # mnm_baseline and tiled_diffusion: whole-canvas images cut down to the rectangle.
-    for crop_index, crop in enumerate(entry.config["crops"]):
+    if method == "mnm_baseline":
+        canvas = Image.new("RGB", (width, height), UNCOVERED)
+        for crop_index, crop in enumerate(entry.config["crops"]):
+            source = tile_source(entry, method, crop_index, combination[crop_index])
+            if source is None:
+                return None
+            whole = open_rgba(source).convert("RGB")
+            box = (crop["width"], crop["height"])
+            if whole.size != box:
+                whole = whole.resize(box, Image.LANCZOS)
+            canvas.paste(whole, (crop["x"], crop["y"]))
+        return canvas
+
+    # tiled_diffusion
+    places = tiled_diffusion_layout(entry)
+    if not places:
+        return None
+    canvas_size = (places["canvas"][0], places["canvas"][1])
+    canvas = Image.new("RGB", canvas_size, UNCOVERED)
+    for place in places["crops"]:
+        crop_index = place["config_index"]
+        if crop_index >= len(combination):
+            return None
         source = tile_source(entry, method, crop_index, combination[crop_index])
         if source is None:
             return None
-        whole = open_rgba(source).convert("RGB")
-        if whole.size != (width, height):
-            whole = whole.resize((width, height), Image.LANCZOS)
-        canvas.paste(whole.crop(rect_box(crop)), (crop["x"], crop["y"]))
+        tile = open_rgba(source).convert("RGB")
+        box = (place["placed_width"], place["placed_height"])
+        if tile.size != box:
+            tile = tile.resize(box, Image.LANCZOS)
+        canvas.paste(tile, (place["placed_x"], place["placed_y"]))
     return canvas
+
+
+def tiled_diffusion_layout(entry):
+    """
+    Where Tiled Diffusion put each crop, straight from its own run_meta.json.
+
+    crop_layout.plan_layout with FORCE_SQUARE_TILE_SIZE ignores the config's boxes
+    entirely: every tile is generated as one square and the crops are chained in the
+    order they are listed, so the canvas is <size> wide by <size * num_crops> tall
+    whatever the config's geometry. run_meta.json records the result, so this reads
+    it rather than re-deriving it. The fallback rebuilds that same stack when a run
+    predates the metadata.
+    """
+    run = entry.runs["tiled_diffusion"]
+    if not run.ok:
+        return None
+    meta = run.extra.get("meta") or {}
+    crops = meta.get("crops")
+    if crops and meta.get("image_width") and meta.get("image_height"):
+        return {"canvas": (meta["image_width"], meta["image_height"]),
+                "crops": sorted(crops, key=lambda c: c.get("chain_position", 0)),
+                "source": "run_meta.json"}
+
+    first = tile_source(entry, "tiled_diffusion", 0, 0)
+    if first is None:
+        return None
+    with Image.open(first) as probe:
+        side = max(probe.size)
+    count = entry.num_crops
+    return {"canvas": (side, side * count),
+            "crops": [{"config_index": i, "chain_position": i,
+                       "placed_x": 0, "placed_y": i * side,
+                       "placed_width": side, "placed_height": side}
+                      for i in range(count)],
+            "source": "reconstructed stack (no run_meta.json)"}
 
 
 # =========================================================================== #
 # capability: what each method can do for this config, and why not
 # =========================================================================== #
 
-def tile_capable(entry, method, settings):
-    if not entry.runs[method].ok:
-        return False, entry.runs[method].reason
-    if entry.set_name not in settings.get(method, {}).get("tile_sets", list(SETS)):
-        return False, f"tile items disabled for the {entry.set_name} set"
-    if tile_source(entry, method, 0, 0) is None:
-        return False, "run folder has no crop0/tile0 image"
-    return True, ""
-
-
 def composite_capable(entry, method, settings, allow_approximate):
+    """Can this method's whole image be assembled for this config, and if not, why not."""
     if not entry.runs[method].ok:
         return False, entry.runs[method].reason
     if entry.set_name not in settings.get(method, {}).get("composite_sets", list(SETS)):
@@ -413,25 +471,21 @@ def composite_capable(entry, method, settings, allow_approximate):
         # The crop map always covers the canvas, background crop included.
         return True, ""
 
-    tiles_canvas = rects_tile_canvas(entry)
     if method == "regional_prompting":
-        if not tiles_canvas and regional_background(entry) is None:
+        if not rects_tile_canvas(entry) and regional_background(entry) is None:
             return False, ("config rectangles leave gaps and no background region is saved "
                            "(re-run with the background-region fix)")
         return True, ""
 
     if method == "mnm_baseline":
-        if not tiles_canvas:
-            return False, ("config rectangles leave gaps and the naive baseline generates no "
-                           "background image, so the composite would have holes")
+        # Assembled from the config's rectangles. Where they do not tile the canvas the
+        # remainder stays black: the baseline generates no background image, and that
+        # absence is a real property of the method rather than a gap in the data.
         return True, ""
 
-    # tiled_diffusion
-    if not tiles_canvas:
-        return False, "config rectangles leave gaps, so the stitched canvas would have holes"
-    if not is_vertical_band_layout(entry) and not allow_approximate:
-        return False, ("crops are not full-width bands, so the vertical seam chain does not "
-                       "correspond to this layout")
+    # tiled_diffusion: its own chain layout, independent of the config's geometry.
+    if tiled_diffusion_layout(entry) is None:
+        return False, "no tiles and no run_meta.json to place them by"
     return True, ""
 
 
@@ -449,14 +503,19 @@ class Assets:
         self.seen = {}
         self.bytes_written = 0
 
-    def add(self, image, kind):
-        limit = self.settings["tile_max_side" if kind == "tile" else "composite_max_side"]
-        if max(image.size) > limit:
-            scale = limit / max(image.size)
-            image = image.resize((max(1, round(image.width * scale)),
-                                  max(1, round(image.height * scale))), Image.LANCZOS)
+    def add(self, image, width):
+        """
+        Encode `image` at exactly `width` pixels across, keeping its aspect ratio.
+
+        Both pictures in a pair are encoded at the same width, so the comparison is
+        at one scale. Height is left free: a Tiled Diffusion stack is genuinely
+        taller than a square canvas and is shown that way rather than squashed.
+        """
+        if image.width != width:
+            height = max(1, round(image.height * width / image.width))
+            image = image.resize((width, height), Image.LANCZOS)
         digest = hashlib.sha1(image.tobytes() + repr(image.size).encode()).hexdigest()[:16]
-        relative = f"assets/{kind}/{digest}.webp"
+        relative = f"assets/comp/{digest}.webp"
         if relative not in self.seen:
             path = self.out / relative
             if not self.dry_run:
@@ -471,25 +530,22 @@ class Assets:
 # item bank
 # =========================================================================== #
 
-QUESTIONS = {
-    "tile_ab_adherence": "Which picture better matches the description?",
-    "tile_ab_quality": "Which picture looks better made — sharper, more natural, fewer artefacts?",
-    "comp_ab_coherence": "Which one looks more like a single, natural picture rather than "
-                         "separate pieces put together?",
-    "comp_ab_adherence": "Which one shows all of the described parts better?",
-    "tile_bw4": "Which picture matches the description best, and which matches it worst?",
-    "comp_bw4": "Which whole picture is best overall, and which is worst?",
-    "attention": "Which picture better matches the description?",
-}
-
-
-def spread(count, wanted, rng):
-    """`wanted` distinct values from range(count), spread out rather than clustered."""
-    if count <= 0:
-        return []
-    values = list(range(count))
-    rng.shuffle(values)
-    return values[:wanted] if wanted <= count else [values[i % count] for i in range(wanted)]
+# One question, three criteria. Every screen in the study is this and nothing else.
+CRITERIA = [
+    {"id": "overall",
+     "label": "Overall quality",
+     "question": "Which image looks better overall?",
+     "hint": "Judge it as a picture: detail, colour, anything that looks wrong or broken."},
+    {"id": "seamless",
+     "label": "Seamlessness",
+     "question": "Which image blends together more seamlessly?",
+     "hint": "Each picture was assembled from separately generated parts. Look for visible "
+             "joins, abrupt changes in lighting or texture, and edges that do not line up."},
+    {"id": "alignment",
+     "label": "Prompt alignment",
+     "question": "Which image matches all of the descriptions better?",
+     "hint": "Every description below should be visible somewhere in the picture."},
+]
 
 
 def real_crops(entry):
@@ -499,237 +555,111 @@ def real_crops(entry):
 
 
 class Builder:
+    """
+    Builds the item bank: one composite of ours against one composite of a single
+    baseline, judged on three criteria. Nothing else.
+    """
+
     def __init__(self, entries, config, out, dry_run):
         self.entries = entries
         self.config = config
         self.assets = Assets(out, config["assets"], dry_run)
         self.mat = tuple(config["assets"]["background"])
+        self.width = config["assets"]["composite_width"]
         self.rng = random.Random(config["seed"])
         self.items = []
         self.report = defaultdict(list)
         self.counter = 0
 
-    # -- helpers ---------------------------------------------------------- #
-
-    def next_id(self, kind):
-        self.counter += 1
-        return f"{kind[0]}{self.counter:04d}"
-
-    def note(self, entry, method, level, reason):
+    def note(self, entry, method, reason):
         self.report[f"{entry.set_name}/{entry.prefix}"].append(
-            {"method": method, "level": level, "skipped": reason})
-
-    def emit(self, entry, kind, options, **fields):
-        """options: list of (method, PIL image). Shuffled here so M1 is not always first."""
-        rendered = []
-        for method, image in options:
-            asset = self.assets.add(image, "tile" if kind.startswith(("tile", "attention")) else "comp")
-            rendered.append({"m": METHOD_CODE[method], **asset})
-        order = list(range(len(rendered)))
-        self.rng.shuffle(order)
-        item = {
-            "id": self.next_id(kind),
-            "type": kind,
-            "level": "comp" if kind.startswith("comp") else "tile",
-            "question": QUESTIONS[kind],
-            "set": entry.set_name,
-            "config": entry.prefix,
-            "num_crops": entry.num_crops,
-            "tiles_per_crop": entry.tiles_per_crop,
-            "options": [rendered[i] for i in order],
-            **fields,
-        }
-        self.items.append(item)
-        return item
-
-    # -- tile items ------------------------------------------------------- #
-
-    def build_tile_pairs(self, entry, capable):
-        """
-        Every baseline is compared against the reference on the *same* tile: same
-        config, same crop, same tile index, so the prompt is identical across the
-        three pairs. That is what makes the comparison fair, and it is also what
-        lets the analysis pair the three outcomes for a McNemar contrast.
-        """
-        quotas = self.config["quotas"]
-        crops = real_crops(entry)
-        if not crops:
-            return
-        for kind in ("tile_ab_adherence", "tile_ab_quality"):
-            for slot in range(quotas.get(kind, 0)):
-                crop_index = crops[slot % len(crops)]
-                tile_index = self.rng.randrange(entry.tiles_per_crop)
-                ours = render_tile(entry, REFERENCE, crop_index, tile_index, self.mat)
-                if ours is None:
-                    continue
-                for baseline in BASELINES:
-                    if baseline not in capable:
-                        continue
-                    theirs = render_tile(entry, baseline, crop_index, tile_index, self.mat)
-                    if theirs is None:
-                        continue
-                    self.emit(entry, kind, [(REFERENCE, ours), (baseline, theirs)],
-                              crop_index=crop_index, tile_index=tile_index,
-                              region=region_descriptor(entry, crop_index),
-                              prompt=entry.prompt(crop_index, tile_index))
-
-    def build_tile_bw4(self, entry, capable):
-        if len(capable) < len(BASELINES) or not self.config["quotas"].get("tile_bw4"):
-            return
-        crops = real_crops(entry)
-        if not crops:
-            return
-        crop_index = self.rng.choice(crops)
-        tile_index = self.rng.randrange(entry.tiles_per_crop)
-        options = []
-        for method in ALL_METHODS:
-            image = render_tile(entry, method, crop_index, tile_index, self.mat)
-            if image is None:
-                return
-            options.append((method, image))
-        self.emit(entry, "tile_bw4", options, crop_index=crop_index, tile_index=tile_index,
-                  region=region_descriptor(entry, crop_index),
-                  prompt=entry.prompt(crop_index, tile_index))
-
-    # -- composite items -------------------------------------------------- #
+            {"method": method, "skipped": reason})
 
     def combination(self, entry):
         return [self.rng.randrange(entry.tiles_per_crop) for _ in range(entry.num_crops)]
 
-    def composite_prompts(self, entry, combination):
-        crops = real_crops(entry)
-        return [entry.prompt(i, combination[i]) for i in crops]
+    def prompts(self, entry, combination):
+        return [entry.prompt(i, combination[i]) for i in real_crops(entry)]
 
-    def build_composite_pairs(self, entry, capable, flags):
-        quotas = self.config["quotas"]
-        for kind in ("comp_ab_coherence", "comp_ab_adherence"):
-            for _ in range(quotas.get(kind, 0)):
-                # One combination of tiles per slot, shared by every baseline, so the
-                # three pairs show the same set of descriptions.
-                combination = self.combination(entry)
-                ours = render_composite(entry, REFERENCE, combination, self.mat)
-                if ours is None:
-                    continue
-                for baseline in BASELINES:
-                    if baseline not in capable:
-                        continue
-                    theirs = render_composite(entry, baseline, combination, self.mat)
-                    if theirs is None:
-                        continue
-                    self.emit(entry, kind, [(REFERENCE, ours), (baseline, theirs)],
-                              combination=combination,
-                              background_prompt=entry.config["background_prompt"],
-                              prompts=self.composite_prompts(entry, combination),
-                              flags={k: v for k, v in flags.items()
-                                     if k == METHOD_CODE[baseline]})
-
-    def build_composite_bw4(self, entry, capable, flags):
-        if len(capable) < len(BASELINES) or not self.config["quotas"].get("comp_bw4"):
-            return
-        combination = self.combination(entry)
-        options = []
-        for method in ALL_METHODS:
-            image = render_composite(entry, method, combination, self.mat)
-            if image is None:
-                return
-            options.append((method, image))
-        self.emit(entry, "comp_bw4", options, combination=combination,
-                  background_prompt=entry.config["background_prompt"],
-                  prompts=self.composite_prompts(entry, combination), flags=flags)
-
-    # -- attention checks ------------------------------------------------- #
-
-    def build_attention(self, entries):
+    def emit(self, entry, baseline, ours, theirs, combination, flags):
         """
-        An ordinary-looking adherence item whose second picture is a region from an
-        unrelated config, so the described thing plainly is not in it. The expected
-        answer lives in legend.json, never in the served manifest.
+        One comparison. Both pictures are encoded at the same width; which of them is
+        shown first is decided here and again per participant, so neither method sits
+        on a fixed side.
         """
-        wanted = self.config.get("attention_checks", 0)
-        usable = [e for e in entries if e.runs[REFERENCE].ok and real_crops(e)]
-        expected = {}
-        if wanted <= 0 or len(usable) < 2:
-            return expected
-        for slot in range(wanted):
-            entry = usable[slot % len(usable)]
-            other = usable[(slot + 1 + slot // len(usable)) % len(usable)]
-            if other.prefix == entry.prefix:
-                continue
-            crop_index = self.rng.choice(real_crops(entry))
-            tile_index = self.rng.randrange(entry.tiles_per_crop)
-            decoy_crop = self.rng.choice(real_crops(other))
-            decoy_tile = self.rng.randrange(other.tiles_per_crop)
-
-            correct = render_tile(entry, REFERENCE, crop_index, tile_index, self.mat)
-            decoy = render_tile(other, REFERENCE, decoy_crop, decoy_tile, self.mat)
-            if correct is None or decoy is None:
-                continue
-            decoy = fit_into(decoy, correct.size, self.mat)
-            item = self.emit(entry, "attention",
-                             [(REFERENCE, correct), (REFERENCE, decoy)],
-                             crop_index=crop_index, tile_index=tile_index,
-                             region=region_descriptor(entry, crop_index),
-                             prompt=entry.prompt(crop_index, tile_index))
-            # emit() shuffled the options; find where the correct render landed.
-            correct_asset = self.assets.add(correct, "tile")["src"]
-            expected[item["id"]] = next(i for i, option in enumerate(item["options"])
-                                        if option["src"] == correct_asset)
-        return expected
-
-    # -- driver ----------------------------------------------------------- #
+        self.counter += 1
+        options = [(REFERENCE, ours), (baseline, theirs)]
+        self.rng.shuffle(options)
+        self.items.append({
+            "id": f"q{self.counter:04d}",
+            "set": entry.set_name,
+            "config": entry.prefix,
+            "seed": entry.config.get("seed"),
+            "num_crops": entry.num_crops,
+            "tiles_per_crop": entry.tiles_per_crop,
+            "combination": combination,
+            "background_prompt": entry.config["background_prompt"],
+            "prompts": self.prompts(entry, combination),
+            "options": [{"m": METHOD_CODE[method], **self.assets.add(image, self.width)}
+                        for method, image in options],
+            "flags": flags,
+        })
 
     def run(self):
         settings = self.config["methods"]
         allow_approximate = self.config["allow_approximate_stitching"]
+        pairs_per_config = self.config["quotas"]["pairs_per_baseline"]
+
         for entry in self.entries:
             if not entry.runs[REFERENCE].ok:
-                self.note(entry, REFERENCE, "all", entry.runs[REFERENCE].reason)
+                self.note(entry, REFERENCE, entry.runs[REFERENCE].reason)
+                continue
+            ok, reason = composite_capable(entry, REFERENCE, settings, allow_approximate)
+            if not ok:
+                self.note(entry, REFERENCE, reason)
                 continue
 
-            tile_capable_methods, composite_capable_methods, flags = [], [], {}
+            usable = []
             for baseline in BASELINES:
-                ok, reason = tile_capable(entry, baseline, settings)
-                if ok:
-                    tile_capable_methods.append(baseline)
-                else:
-                    self.note(entry, baseline, "tile", reason)
                 ok, reason = composite_capable(entry, baseline, settings, allow_approximate)
                 if ok:
-                    composite_capable_methods.append(baseline)
+                    usable.append(baseline)
                 else:
-                    self.note(entry, baseline, "composite", reason)
+                    self.note(entry, baseline, reason)
+            if not usable:
+                continue
 
-            if "tiled_diffusion" in composite_capable_methods:
-                # Keyed by code, not name: the manifest is served to participants.
+            flags = {}
+            layout = tiled_diffusion_layout(entry)
+            if "tiled_diffusion" in usable and layout:
                 flags[METHOD_CODE["tiled_diffusion"]] = {
-                    "stitch_faithful": is_vertical_band_layout(entry)}
+                    "canvas": list(layout["canvas"]), "from": layout["source"]}
 
-            self.build_tile_pairs(entry, tile_capable_methods)
-            self.build_tile_bw4(entry, tile_capable_methods)
-            ok, reason = composite_capable(entry, REFERENCE, settings, allow_approximate)
-            if ok:
-                self.build_composite_pairs(entry, composite_capable_methods, flags)
-                self.build_composite_bw4(entry, composite_capable_methods, flags)
-            else:
-                self.note(entry, REFERENCE, "composite", reason)
+            for _ in range(pairs_per_config):
+                # One set of tile choices per round, shared by every baseline, so the
+                # comparisons in that round show the same descriptions.
+                combination = self.combination(entry)
+                ours = render_composite(entry, REFERENCE, combination, self.mat)
+                if ours is None:
+                    self.note(entry, REFERENCE, "a tile referenced by the layout is missing")
+                    break
+                for baseline in usable:
+                    theirs = render_composite(entry, baseline, combination, self.mat)
+                    if theirs is None:
+                        self.note(entry, baseline, "a tile the composite needs is missing")
+                        continue
+                    self.emit(entry, baseline, ours, theirs, combination, flags)
 
-        return self.build_attention(self.entries)
-
-
-# =========================================================================== #
 
 def summarise(items):
-    by_type = Counter(item["type"] for item in items)
     by_set = Counter(item["set"] for item in items)
     pairs = Counter()
     for item in items:
-        if item["type"].endswith(("adherence", "quality", "coherence")) and len(item["options"]) == 2:
-            codes = {option["m"] for option in item["options"]}
-            other = codes - {METHOD_CODE[REFERENCE]}
-            if other:
-                pairs[f"{METHOD_CODE[REFERENCE]} vs {other.pop()}"] += 1
-    return {"total": len(items), "by_type": dict(by_type), "by_set": dict(by_set),
-            "by_pair": dict(pairs)}
+        other = {option["m"] for option in item["options"]} - {METHOD_CODE[REFERENCE]}
+        if other:
+            pairs[f"{METHOD_CODE[REFERENCE]} vs {other.pop()}"] += 1
+    return {"total": len(items), "by_set": dict(by_set), "by_pair": dict(pairs),
+            "configs": len({item["config"] for item in items})}
 
 
 def main():
@@ -763,13 +693,12 @@ def main():
         shutil.rmtree(args.out / "assets", ignore_errors=True)
 
     builder = Builder(entries, settings, args.out, args.dry_run)
-    expected = builder.run()
+    builder.run()
     counts = summarise(builder.items)
 
-    print("\nitem bank")
-    for key, value in counts["by_type"].items():
-        print(f"  {key:22s} {value}")
-    print(f"  {'TOTAL':22s} {counts['total']}")
+    print(f"\nitem bank: {counts['total']} comparisons over {counts['configs']} configs")
+    for key, value in sorted(counts["by_set"].items()):
+        print(f"  {key + ' set':22s} {value}")
     print("\ncomparisons against the reference method")
     for key, value in counts["by_pair"].items():
         print(f"  {key:22s} {value}")
@@ -794,6 +723,8 @@ def main():
         "preview": "mock" in root.name.lower(),
         "seed": settings["seed"],
         "session": settings["session"],
+        "reference_code": METHOD_CODE[REFERENCE],
+        "criteria": CRITERIA,
         "counts": counts,
         "items": builder.items,
     }
@@ -805,10 +736,10 @@ def main():
     keys = args.out / "analysis"
     keys.mkdir(parents=True, exist_ok=True)
     (keys / "legend.json").write_text(json.dumps({
-        "note": "Analysis key: which code was which method, and the attention-check "
-                "answers. The study page never fetches this.",
+        "note": "Analysis key: which code was which method. The study page never "
+                "fetches this.",
         "methods": {code: method for method, code in METHOD_CODE.items()},
-        "attention_expected": expected,
+        "criteria": [criterion["id"] for criterion in CRITERIA],
     }, indent=2))
     (keys / "build_report.json").write_text(json.dumps({
         "built_at": manifest["built_at"],

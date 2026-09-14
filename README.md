@@ -117,18 +117,21 @@ once the real outputs land, then rebuild.
 
 ## What the study asks
 
-| Question type | What the participant sees | What it measures |
-|---|---|---|
-| `tile_ab_adherence` | One description, two versions of one region | Does the region show what was described |
-| `tile_ab_quality` | The same, different question | Plain image quality |
-| `comp_ab_coherence` | Two whole images | Does it hold together as one picture rather than pieces |
-| `comp_ab_adherence` | Two whole images, all the descriptions listed | Does the whole image deliver every part |
-| `tile_bw4` / `comp_bw4` | All four methods at once | Best and worst — an efficient full ranking |
-| `attention` | Looks like an ordinary question; one picture is from an unrelated prompt | Filters careless responses |
+**One question, thirty times.** Every screen shows two assembled images — ours against
+one randomly chosen baseline's — and asks three things about them:
 
-Every baseline is compared against Mix-n-match on the **same** config, crop and tile
-index — the same description — so the three pairs are matched, both for fairness and
-so the analysis can pair them.
+| Criterion | The question | What it measures |
+|---|---|---|
+| Overall quality | Which image looks better overall? | The picture as a picture |
+| Seamlessness | Which image blends together more seamlessly? | Visible joins, mismatched lighting, edges that do not line up — the thing this project is actually for |
+| Prompt alignment | Which image matches all of the descriptions better? | Whether every described part is present |
+
+Each is answered **A wins / Tie / B wins**. Which method is shown as A is randomised per
+participant, so neither side is fixed. All three criteria are answered on the same pair,
+which makes them exactly paired for the analysis.
+
+Recorded per answer: participant id, config prefix, seed, cropping set, region and option
+counts, the tile combination, the two method codes, and the winner per criterion.
 
 ---
 
@@ -150,19 +153,19 @@ so the analysis can pair them.
 
 ---
 
-## How comparisons are made fair
+## How each method's image is assembled
 
-The four methods do not write the same kind of file, so the build normalises them:
+The four methods write different things, so the build reconstructs each one the way that
+method itself would:
 
-| Method | What it writes | How it is shown |
+| Method | Assembled from | Result |
 |---|---|---|
-| Mix-n-match | RGBA bounding box of the region it solved, transparent outside | Composited on a neutral mat, irregular outline intact |
-| Regional Prompting | RGB, exactly the config's rectangle | Scaled to fit the same display box |
-| Naive baseline | RGB, the whole 1024² canvas | Whole image scaled to fit inside the display box — it stays square, because that is what the method actually produced |
-| Tiled Diffusion | RGB, whole 1024² per region | The same |
+| Mix-n-match | Its own `crop_map` from `tiles/layout.json`; each RGBA region tile pasted at its bounding box through its alpha | 1024×1024 |
+| Regional Prompting | Its background region, then each config rectangle pasted at `(x, y)` | 1024×1024 |
+| Naive baseline | Each whole-canvas image resized into its config rectangle and pasted at `(x, y)`. Whatever the rectangles leave uncovered stays **black** — the baseline generates no background image | 1024×1024 |
+| Tiled Diffusion | Exactly as `crop_output.compose_combination` does it, using the placement in `run_meta.json`. It generates each region as a 1024² square and chains them vertically | 1024×(1024·n) |
 
-Whole-image questions composite one tile per region: Mix-n-match through its own
-`crop_map`, Regional Prompting through its background region plus the config
-rectangles, and the two whole-canvas methods by cutting each config rectangle out of
-their image and pasting it back. Where that cannot be done without leaving holes, the
-item is not produced. `analysis/README.md` lists the caveats that belong in the write-up.
+Both images in a pair are encoded at the **same width**, aspect ratio preserved, height
+left free. So a Tiled Diffusion stack is genuinely taller than our square canvas and is
+shown that way rather than squashed. `analysis/README.md` lists the caveats that belong
+in the write-up.

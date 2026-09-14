@@ -71,7 +71,7 @@
         if (!response.ok) throw new Error("HTTP " + response.status);
         setStatus("", "Your answers are in. Thank you.",
           "You can close this tab now.");
-        try { localStorage.removeItem("mnm-study-v1"); } catch (error) { /* already gone */ }
+        try { localStorage.removeItem("mnm-study-v2"); } catch (error) { /* already gone */ }
         return;
       } catch (error) {
         if (attempt < ATTEMPTS) await wait(attempt * 1200);

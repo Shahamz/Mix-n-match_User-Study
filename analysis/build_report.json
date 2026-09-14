@@ -1,60 +1,20 @@
 {
-  "built_at": "2026-09-14T13:28:40+00:00",
+  "built_at": "2026-09-14T19:51:49+00:00",
   "root": "/home/shahamzil/Thesis/trajectoryRoPE/Mix-n-match_User-Study/mock_root",
   "configs": 5,
   "problems": [],
   "counts": {
-    "total": 78,
-    "by_type": {
-      "tile_ab_adherence": 30,
-      "tile_ab_quality": 15,
-      "tile_bw4": 5,
-      "comp_ab_coherence": 10,
-      "comp_ab_adherence": 10,
-      "comp_bw4": 2,
-      "attention": 6
-    },
+    "total": 30,
     "by_set": {
-      "static": 52,
-      "dynamic": 26
+      "static": 18,
+      "dynamic": 12
     },
     "by_pair": {
-      "M1 vs M2": 21,
-      "M1 vs M3": 25,
-      "M1 vs M4": 19
-    }
+      "M1 vs M2": 10,
+      "M1 vs M3": 10,
+      "M1 vs M4": 10
+    },
+    "configs": 5
   },
-  "skipped": {
-    "static/cfg45_static_config_3": [
-      {
-        "method": "tiled_diffusion",
-        "level": "composite",
-        "skipped": "crops are not full-width bands, so the vertical seam chain does not correspond to this layout"
-      }
-    ],
-    "dynamic/cfg45_dynamic_config_1": [
-      {
-        "method": "mnm_baseline",
-        "level": "composite",
-        "skipped": "config rectangles leave gaps and the naive baseline generates no background image, so the composite would have holes"
-      },
-      {
-        "method": "tiled_diffusion",
-        "level": "composite",
-        "skipped": "composites disabled for the dynamic set"
-      }
-    ],
-    "dynamic/cfg45_dynamic_config_2": [
-      {
-        "method": "mnm_baseline",
-        "level": "composite",
-        "skipped": "config rectangles leave gaps and the naive baseline generates no background image, so the composite would have holes"
-      },
-      {
-        "method": "tiled_diffusion",
-        "level": "composite",
-        "skipped": "composites disabled for the dynamic set"
-      }
-    ]
-  }
+  "skipped": {}
 }

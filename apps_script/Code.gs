@@ -28,9 +28,12 @@ var SUMMARY_HEADERS = [
 ];
 
 var ANSWER_HEADERS = [
-  'received_at', 'participant', 'item_id', 'type', 'level', 'set', 'config',
-  'position', 'choice', 'choice_position', 'best', 'best_position',
-  'worst', 'worst_position', 'shown_order', 'ms', 'answered_at'
+  'received_at', 'participant', 'item_id', 'set', 'config', 'seed',
+  'num_crops', 'tiles_per_crop', 'combination',
+  'a_method', 'b_method',
+  'overall', 'seamless', 'alignment',
+  'win_overall', 'win_seamless', 'win_alignment',
+  'position', 'ms', 'answered_at'
 ];
 
 
@@ -114,22 +117,27 @@ function writeSummary(data) {
 function writeAnswers(data) {
   var now = new Date();
   var rows = data.responses.map(function (answer) {
+    var picks = answer.answers || {};
+    var wins = answer.winners || {};
     return [
       now,
       data.participant,
       answer.id || '',
-      answer.type || '',
-      answer.level || '',
       answer.set || '',
       answer.config || '',
+      valueOr(answer.seed),
+      valueOr(answer.num_crops),
+      valueOr(answer.tiles_per_crop),
+      (answer.combination || []).join('|'),
+      answer.a_method || '',
+      answer.b_method || '',
+      picks.overall || '',
+      picks.seamless || '',
+      picks.alignment || '',
+      wins.overall || '',
+      wins.seamless || '',
+      wins.alignment || '',
       valueOr(answer.position),
-      valueOr(answer.choice),
-      valueOr(answer.choice_position),
-      valueOr(answer.best),
-      valueOr(answer.best_position),
-      valueOr(answer.worst),
-      valueOr(answer.worst_position),
-      (answer.shown_order || []).join('|'),
       valueOr(answer.ms),
       answer.at || ''
     ];

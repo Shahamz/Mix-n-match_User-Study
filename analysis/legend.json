@@ -1,17 +1,14 @@
 {
-  "note": "Analysis key: which code was which method, and the attention-check answers. The study page never fetches this.",
+  "note": "Analysis key: which code was which method. The study page never fetches this.",
   "methods": {
     "M1": "mix_n_match",
     "M2": "mnm_baseline",
     "M3": "regional_prompting",
     "M4": "tiled_diffusion"
   },
-  "attention_expected": {
-    "a0073": 0,
-    "a0074": 0,
-    "a0075": 0,
-    "a0076": 0,
-    "a0077": 0,
-    "a0078": 0
-  }
+  "criteria": [
+    "overall",
+    "seamless",
+    "alignment"
+  ]
 }

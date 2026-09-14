@@ -18,29 +18,22 @@ seed: 20260914
 reference_method: mix_n_match
 
 # ---------------------------------------------------------------------------
-# Which sets each baseline may appear in, per question level.
-#
-# tiled_diffusion generates whole 1024x1024 images per crop and seam-constrains
-# them as a *vertical chain*. That only corresponds to the config's crop boxes
-# when the boxes are full-width bands stacked top to bottom, which holds for the
-# static set and almost never for the dynamic one. Tile-level questions need no
-# stitching at all, so they are unrestricted.
+# Which sets each baseline may be compared in.
 # ---------------------------------------------------------------------------
 methods:
   mnm_baseline:
-    tile_sets: [static, dynamic]
-    composite_sets: [static, dynamic]   # dynamic needs a background source on disk;
-                                        # skipped with a reason if there is none
+    # Assembled from the config's crop rectangles. Where they do not tile the canvas
+    # the remainder stays black: the baseline generates no background image.
+    composite_sets: [static, dynamic]
   regional_prompting:
-    tile_sets: [static, dynamic]
     composite_sets: [static, dynamic]
   tiled_diffusion:
-    tile_sets: [static, dynamic]
-    composite_sets: [static]
+    # Its chain layout ignores the config's boxes entirely, so every config works.
+    composite_sets: [static, dynamic]
 
-# Build composite items even where the stitching assumption is only approximate
-# (a non-vertical-band layout for tiled_diffusion). They are tagged
-# stitch_faithful:false so the analysis can report with and without them.
+# Kept for the loader; no method currently needs an approximate reconstruction.
+# Tiled Diffusion is rebuilt exactly from its own run_meta.json, and the naive
+# baseline from the config's crop rectangles.
 allow_approximate_stitching: false
 
 # ---------------------------------------------------------------------------
@@ -48,17 +41,10 @@ allow_approximate_stitching: false
 # when a config does not have enough crops/tiles or a run folder is missing.
 # ---------------------------------------------------------------------------
 quotas:
-  tile_ab_adherence: 2      # per baseline -> up to 6 per config
-  tile_ab_quality: 1        # per baseline -> up to 3 per config
-  comp_ab_coherence: 1      # per baseline
-  comp_ab_adherence: 1      # per baseline
-  tile_bw4: 1               # four-way best/worst on one region
-  comp_bw4: 1               # four-way best/worst on a whole image
-
-# Attention checks are drawn from the finished bank: an ordinary-looking item
-# whose second option is a tile from an unrelated config, so the correct answer
-# is obvious to anyone actually reading the prompt.
-attention_checks: 6         # size of the pool; each participant is served 2
+  # Rounds per config. Each round draws one tile per crop and compares our composite
+  # against every available baseline on that same set of descriptions, so a round
+  # yields up to three comparisons.
+  pairs_per_baseline: 2
 
 # ---------------------------------------------------------------------------
 # Asset encoding. Content-hashed filenames, so identical renders are stored once.
@@ -66,8 +52,10 @@ attention_checks: 6         # size of the pool; each participant is served 2
 assets:
   format: webp
   quality: 82
-  tile_max_side: 768
-  composite_max_side: 900
+  # Both pictures in a pair are encoded at this width, so the comparison is at one
+  # scale. Height is left free: a Tiled Diffusion stack really is taller than a
+  # square canvas and is shown that way rather than squashed.
+  composite_width: 860
   background: [246, 246, 248]   # neutral mat behind irregular tiles
 
 # What each participant is served. sampler.js reads this straight from the manifest.
@@ -75,12 +63,3 @@ assets:
 # whatever else the bank holds if a type runs short, and never exceeds items_per_participant.
 session:
   items_per_participant: 30
-  practice_items: 1
-  composition:
-    tile_ab_adherence: 9      # 3 per baseline
-    tile_ab_quality: 3        # 1 per baseline
-    comp_ab_coherence: 6      # 2 per baseline
-    comp_ab_adherence: 4
-    tile_bw4: 2
-    comp_bw4: 2
-    attention: 2

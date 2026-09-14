@@ -1,50 +1,45 @@
 /* ---------------------------------------------------------------------------
- * The study itself: load the bank, draw a session, run the questions, hand the
- * answers to submit.js.
+ * The study: load the bank, draw a session, run the questions, hand the answers
+ * to submit.js.
  *
- * Nothing here knows which method made which picture. The bank labels them M1
- * to M4; the key that maps those back is kept out of the served site.
+ * Every screen is the same question — two whole images, three criteria, three
+ * answers. Nothing here knows which method made which picture: the bank labels
+ * them M1..M4 and the key that maps those back is kept out of the served site.
  * ------------------------------------------------------------------------- */
 
 (function () {
   "use strict";
 
-  const CONFIG = window.STUDY_CONFIG;
-  const STORE_KEY = "mnm-study-v1";
+  var CONFIG = window.STUDY_CONFIG;
+  var STORE_KEY = "mnm-study-v2";
 
-  const screens = {};
-  let manifest = null;
-  let session = null;
-  let state = null;
-  let shownAt = 0;
-  let pending = null;      // the four-way answer being assembled
+  var screens = {};
+  var manifest = null;
+  var session = null;
+  var state = null;
+  var shownAt = 0;
+  var answers = {};        // criterion id -> "A" | "B" | "tie", for the current screen
 
   /* ------------------------------------------------------------- storage -- */
 
   function load() {
     try {
-      const raw = localStorage.getItem(STORE_KEY);
+      var raw = localStorage.getItem(STORE_KEY);
       return raw ? JSON.parse(raw) : null;
-    } catch (error) {
-      return null;
-    }
+    } catch (error) { return null; }
   }
 
   function save() {
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(state));
-    } catch (error) {
-      /* Private windows and blocked site data: the study still works, it just
-         cannot resume after a refresh. */
-    }
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (error) { /* private window */ }
   }
 
   function newParticipantId() {
-    const bytes = new Uint8Array(9);
-    (window.crypto || {}).getRandomValues
-      ? window.crypto.getRandomValues(bytes)
-      : bytes.forEach(function (_, i) { bytes[i] = Math.floor(Math.random() * 256); });
-    return Array.from(bytes).map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+    var bytes = new Uint8Array(9);
+    if (window.crypto && window.crypto.getRandomValues) { window.crypto.getRandomValues(bytes); }
+    else { for (var i = 0; i < bytes.length; i += 1) { bytes[i] = Math.floor(Math.random() * 256); } }
+    return Array.prototype.map.call(bytes, function (b) {
+      return b.toString(16).padStart(2, "0");
+    }).join("");
   }
 
   /* --------------------------------------------------------------- screen -- */
@@ -56,253 +51,214 @@
   }
 
   function el(tag, className, text) {
-    const node = document.createElement(tag);
+    var node = document.createElement(tag);
     if (className) node.className = className;
     if (text !== undefined) node.textContent = text;
     return node;
   }
 
-  /* ---------------------------------------------------------------- rail -- */
-
   function drawRail() {
-    const rail = document.getElementById("rail");
+    var rail = document.getElementById("rail");
     if (rail.childElementCount !== session.items.length) {
       rail.textContent = "";
       session.items.forEach(function () { rail.appendChild(el("span", "rail__seg")); });
     }
-    Array.from(rail.children).forEach(function (segment, index) {
+    Array.prototype.forEach.call(rail.children, function (segment, index) {
       segment.dataset.state = index < state.index ? "done" : (index === state.index ? "now" : "todo");
     });
     document.getElementById("count").textContent =
       "Question " + Math.min(state.index + 1, session.items.length) + " of " + session.items.length;
   }
 
-  /* -------------------------------------------------------- region glyph -- */
+  /* ------------------------------------------------------------ lightbox -- */
 
-  function regionGlyph(region) {
-    const wrap = el("div", "region");
-    const width = 62;
-    const height = Math.round(width / (region.ar || 1));
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
-    svg.setAttribute("aria-hidden", "true");
-
-    const canvas = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    canvas.setAttribute("x", "0.5"); canvas.setAttribute("y", "0.5");
-    canvas.setAttribute("width", String(width - 1)); canvas.setAttribute("height", String(height - 1));
-    canvas.setAttribute("fill", "var(--surface-sunk)");
-    canvas.setAttribute("stroke", "var(--line)");
-    svg.appendChild(canvas);
-
-    const part = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    part.setAttribute("x", String(region.x * width));
-    part.setAttribute("y", String(region.y * height));
-    part.setAttribute("width", String(Math.max(2, region.w * width)));
-    part.setAttribute("height", String(Math.max(2, region.h * height)));
-    part.setAttribute("fill", "var(--accent)");
-    svg.appendChild(part);
-
-    wrap.appendChild(svg);
-    wrap.appendChild(el("div", "region__label", "this part"));
-    return wrap;
-  }
-
-  /* -------------------------------------------------------------- prompt -- */
-
-  function askBlock(item, questionText) {
-    const ask = el("section", "ask");
-    const head = el("div", "ask__head");
-    if (item.region) head.appendChild(regionGlyph(item.region));
-
-    const body = el("div");
-    body.appendChild(el("h2", "ask__q", questionText || item.question));
-
-    if (item.prompt) {
-      body.appendChild(el("p", "ask__quote", item.prompt));
-    } else if (item.prompts) {
-      const list = el("ul", "ask__quote");
-      if (item.background_prompt) list.appendChild(el("li", null, item.background_prompt));
-      item.prompts.forEach(function (text) { list.appendChild(el("li", null, text)); });
-      body.appendChild(list);
+  function openLightbox(src, label) {
+    var box = el("div", "lb");
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-label", "Image " + label + ", enlarged");
+    var image = new Image();
+    image.src = src;
+    image.alt = "Image " + label + ", enlarged";
+    var close = el("button", "lb__close", "Close");
+    close.type = "button";
+    box.appendChild(image);
+    box.appendChild(close);
+    function dismiss() {
+      box.remove();
+      document.removeEventListener("keydown", onKey);
     }
-
-    const hint = item.level === "tile"
-      ? "The two pictures may be different shapes and sizes. Judge what is in them, not their outline."
-      : "Look at the picture as a whole.";
-    body.appendChild(el("p", "ask__hint", hint));
-
-    head.appendChild(body);
-    ask.appendChild(head);
-    return ask;
-  }
-
-  /* ------------------------------------------------------------- choices -- */
-
-  const KEYS = ["A", "B", "C", "D"];
-
-  function renderChoices(entry, onPick) {
-    const item = entry.item;
-    const grid = el("div", "choices");
-    grid.dataset.count = String(item.options.length);
-
-    entry.order.forEach(function (optionIndex, position) {
-      const option = item.options[optionIndex];
-      const button = el("button", "choice");
-      button.type = "button";
-      button.setAttribute("aria-pressed", "false");
-      button.dataset.optionIndex = String(optionIndex);
-      button.dataset.position = String(position);
-
-      const frame = el("span", "choice__frame");
-      const image = new Image();
-      image.src = option.src;
-      image.width = option.w;
-      image.height = option.h;
-      image.alt = "Picture " + KEYS[position];
-      image.loading = "eager";
-      image.decoding = "async";
-      frame.appendChild(image);
-      button.appendChild(frame);
-
-      const foot = el("span", "choice__foot");
-      foot.appendChild(el("span", "choice__key", KEYS[position]));
-      foot.appendChild(el("span", null, "Picture " + KEYS[position]));
-      foot.appendChild(el("span", "choice__state", ""));
-      button.appendChild(foot);
-
-      button.addEventListener("click", function () { onPick(position, optionIndex); });
-      grid.appendChild(button);
+    function onKey(event) { if (event.key === "Escape") dismiss(); }
+    box.addEventListener("click", function (event) {
+      if (event.target === box || event.target === close) dismiss();
     });
-    return grid;
-  }
-
-  function markChoice(grid, position, label, mark) {
-    const button = grid.children[position];
-    button.setAttribute("aria-pressed", mark === "worst" ? "false" : "true");
-    if (mark) button.dataset.mark = mark;
-    button.querySelector(".choice__state").textContent = label;
-  }
-
-  function lockChoices(grid) {
-    Array.from(grid.children).forEach(function (button) { button.disabled = true; });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(box);
+    close.focus();
   }
 
   /* ------------------------------------------------------------ the item -- */
 
+  var SIDES = ["A", "B"];
+
+  function renderPair(entry) {
+    var pair = el("div", "pair");
+    entry.order.forEach(function (optionIndex, side) {
+      var option = entry.item.options[optionIndex];
+      var shot = el("div", "shot");
+      shot.appendChild(el("span", "shot__tag", "Image " + SIDES[side]));
+
+      var image = new Image();
+      image.className = "shot__img";
+      image.src = option.src;
+      image.width = option.w;
+      image.height = option.h;
+      image.alt = "Image " + SIDES[side];
+      image.decoding = "async";
+      image.addEventListener("click", function () { openLightbox(option.src, SIDES[side]); });
+      shot.appendChild(image);
+
+      var zoom = el("button", "shot__zoom", "Enlarge");
+      zoom.type = "button";
+      zoom.addEventListener("click", function () { openLightbox(option.src, SIDES[side]); });
+      shot.appendChild(zoom);
+
+      pair.appendChild(shot);
+    });
+    return pair;
+  }
+
+  function renderPrompts(item) {
+    var box = el("div", "prompts");
+    box.appendChild(el("p", "prompts__h", "What both images were asked to show"));
+    var list = el("ul");
+    if (item.background_prompt) list.appendChild(el("li", null, item.background_prompt));
+    (item.prompts || []).forEach(function (text) { list.appendChild(el("li", null, text)); });
+    box.appendChild(list);
+    return box;
+  }
+
+  function renderCriteria(onChange) {
+    var wrap = el("div", "crits");
+    manifest.criteria.forEach(function (criterion, index) {
+      var card = el("div", "crit");
+      card.dataset.criterion = criterion.id;
+      card.appendChild(el("p", "crit__n", "Criterion " + (index + 1) + " of " +
+        manifest.criteria.length + " · " + criterion.label));
+      card.appendChild(el("h3", "crit__q", criterion.question));
+      card.appendChild(el("p", "crit__hint", criterion.hint));
+
+      var picks = el("div", "picks");
+      picks.setAttribute("role", "group");
+      picks.setAttribute("aria-label", criterion.question);
+      [["A", "A wins"], ["tie", "Tie"], ["B", "B wins"]].forEach(function (choice) {
+        var button = el("button", "pick" + (choice[0] === "tie" ? " pick--tie" : ""), choice[1]);
+        button.type = "button";
+        button.setAttribute("aria-pressed", "false");
+        button.dataset.value = choice[0];
+        button.addEventListener("click", function () {
+          answers[criterion.id] = choice[0];
+          Array.prototype.forEach.call(picks.children, function (other) {
+            other.setAttribute("aria-pressed", String(other === button));
+          });
+          card.dataset.answered = "1";
+          onChange();
+        });
+        picks.appendChild(button);
+      });
+      card.appendChild(picks);
+      wrap.appendChild(card);
+    });
+    return wrap;
+  }
+
   function preload(from) {
-    for (let i = from; i < Math.min(from + 2, session.items.length); i += 1) {
+    for (var i = from; i < Math.min(from + 2, session.items.length); i += 1) {
       session.items[i].item.options.forEach(function (option) {
-        const image = new Image();
+        var image = new Image();
         image.src = option.src;
       });
     }
   }
 
-  function record(entry, answer) {
-    state.responses.push(Object.assign({
-      id: entry.item.id,
-      type: entry.item.type,
-      level: entry.item.level,
-      set: entry.item.set,
-      config: entry.item.config,
-      shown_order: entry.order,
+  function record(entry) {
+    var item = entry.item;
+    /* The codes, not method names: the page has never been told which is which.
+       Recording the winner per criterion as a code makes the sheet readable without
+       breaking that. */
+    var codeA = item.options[entry.order[0]].m;
+    var codeB = item.options[entry.order[1]].m;
+    var winners = {};
+    manifest.criteria.forEach(function (criterion) {
+      var pick = answers[criterion.id];
+      winners[criterion.id] = pick === "tie" ? "tie" : (pick === "A" ? codeA : codeB);
+    });
+
+    state.responses.push({
+      id: item.id,
+      config: item.config,
+      seed: item.seed,
+      set: item.set,
+      num_crops: item.num_crops,
+      tiles_per_crop: item.tiles_per_crop,
+      combination: item.combination,
+      a: entry.order[0],
+      b: entry.order[1],
+      a_method: codeA,
+      b_method: codeB,
+      answers: {
+        overall: answers.overall,
+        seamless: answers.seamless,
+        alignment: answers.alignment
+      },
+      winners: winners,
       position: state.index,
       ms: Date.now() - shownAt,
       at: new Date().toISOString()
-    }, answer));
+    });
     state.index += 1;
     save();
-    window.setTimeout(renderCurrent, CONFIG.advanceDelayMs);
+    renderCurrent();
   }
 
   function renderCurrent() {
-    if (state.index >= session.items.length) {
-      show("background");
-      return;
-    }
-    const entry = session.items[state.index];
-    const item = entry.item;
-    const stage = document.getElementById("stage");
+    if (state.index >= session.items.length) { show("background"); return; }
+
+    var entry = session.items[state.index];
+    var stage = document.getElementById("stage");
     stage.textContent = "";
     stage.className = "";
-    void stage.offsetWidth;          /* restart the fade for the new question */
+    void stage.offsetWidth;                      /* restart the fade for the new question */
     stage.className = "fadein";
-    pending = null;
+    answers = {};
 
-    const isFourWay = item.options.length === 4;
-    const ask = askBlock(item, isFourWay ? "Which picture is best?" : item.question);
-    stage.appendChild(ask);
+    stage.appendChild(renderPair(entry));
+    stage.appendChild(renderPrompts(entry.item));
 
-    const foot = el("div", "stage__foot");
-    const step = el("p", "stage__step");
-    if (isFourWay) {
-      step.innerHTML = "Step 1 of 2 &middot; <b>pick the best</b>";
-    } else {
-      step.textContent = "Click a picture, or press " + KEYS[0] + " / " + KEYS[1] + ".";
-    }
-    foot.appendChild(step);
+    var next = el("button", "btn", "Next question");
+    next.type = "button";
+    next.disabled = true;
+    var left = el("p", "left", "Answer all three to continue.");
 
-    const grid = renderChoices(entry, function (position, optionIndex) {
-      if (!isFourWay) {
-        markChoice(grid, position, "Chosen");
-        lockChoices(grid);
-        record(entry, { choice: optionIndex, choice_position: position });
-        return;
-      }
-      if (pending === null) {
-        pending = { best: optionIndex, best_position: position };
-        markChoice(grid, position, "Best");
-        grid.children[position].disabled = true;
-        ask.querySelector(".ask__q").textContent = "And which is worst?";
-        step.innerHTML = "Step 2 of 2 &middot; <b>pick the worst</b>";
-        return;
-      }
-      markChoice(grid, position, "Worst", "worst");
-      lockChoices(grid);
-      record(entry, Object.assign(pending, { worst: optionIndex, worst_position: position }));
-    });
+    stage.appendChild(renderCriteria(function () {
+      var missing = manifest.criteria.filter(function (criterion) {
+        return !answers[criterion.id];
+      }).length;
+      next.disabled = missing > 0;
+      left.textContent = missing === 0
+        ? (state.index + 1 === session.items.length ? "That is the last one." : "")
+        : missing + (missing === 1 ? " criterion left." : " criteria left.");
+      if (missing === 0) next.focus({ preventScroll: true });
+    }));
 
-    stage.appendChild(grid);
-    stage.appendChild(foot);
+    next.addEventListener("click", function () { record(entry); });
+    var footer = el("div", "next");
+    footer.appendChild(next);
+    stage.appendChild(footer);
+    stage.appendChild(left);
+
     drawRail();
     shownAt = Date.now();
     preload(state.index + 1);
-  }
-
-  /* ------------------------------------------------------------ keyboard -- */
-
-  document.addEventListener("keydown", function (event) {
-    if (!screens.run || screens.run.hidden) return;
-    const grid = document.querySelector("#stage .choices");
-    if (!grid) return;
-    const map = { "1": 0, "2": 1, "3": 2, "4": 3, a: 0, b: 1, c: 2, d: 3,
-                  ArrowLeft: 0, ArrowRight: 1 };
-    const index = map[event.key] !== undefined ? map[event.key] : map[event.key.toLowerCase()];
-    if (index === undefined || index >= grid.children.length) return;
-    const button = grid.children[index];
-    if (button.disabled) return;
-    event.preventDefault();
-    button.click();
-  });
-
-  /* ------------------------------------------------------------- practice -- */
-
-  function renderPractice() {
-    const host = document.getElementById("practice");
-    if (!session.practice) {
-      host.hidden = true;
-      document.getElementById("practice-done").hidden = false;
-      return;
-    }
-    const entry = { item: session.practice, order: session.practice.options.map(function (_, i) { return i; }) };
-    host.textContent = "";
-    host.appendChild(askBlock(entry.item, entry.item.question));
-    const grid = renderChoices(entry, function (position) {
-      markChoice(grid, position, "Chosen");
-      lockChoices(grid);
-      document.getElementById("practice-done").hidden = false;
-    });
-    host.appendChild(grid);
   }
 
   /* ----------------------------------------------------------- background -- */
@@ -310,9 +266,9 @@
   function wireOptionGroups() {
     document.querySelectorAll("[data-group]").forEach(function (group) {
       group.addEventListener("click", function (event) {
-        const button = event.target.closest(".opt");
+        var button = event.target.closest(".opt");
         if (!button) return;
-        Array.from(group.querySelectorAll(".opt")).forEach(function (other) {
+        Array.prototype.forEach.call(group.querySelectorAll(".opt"), function (other) {
           other.setAttribute("aria-pressed", String(other === button));
         });
         state.background[group.dataset.group] = button.dataset.value;
@@ -340,11 +296,6 @@
     };
   }
 
-  function finish() {
-    show("done");
-    window.submitStudy(payload());
-  }
-
   function begin() {
     state.startedAt = state.startedAt || new Date().toISOString();
     save();
@@ -352,62 +303,69 @@
     renderCurrent();
   }
 
-  async function boot() {
+  function finish() {
+    show("done");
+    window.submitStudy(payload());
+  }
+
+  function boot() {
     document.getElementById("mark").textContent = CONFIG.name;
     document.title = CONFIG.name;
 
-    let response;
-    try {
-      response = await fetch(CONFIG.manifestUrl, { cache: "no-cache" });
+    fetch(CONFIG.manifestUrl, { cache: "no-cache" }).then(function (response) {
       if (!response.ok) throw new Error("HTTP " + response.status);
-      manifest = await response.json();
-    } catch (error) {
+      return response.json();
+    }).then(function (data) {
+      manifest = data;
+
+      var saved = load();
+      var stale = saved && saved.builtAt && saved.builtAt !== manifest.built_at;
+      state = (saved && saved.responses && !stale) ? saved : {
+        pid: newParticipantId(), startedAt: null, index: 0, responses: [], background: {}
+      };
+      state.builtAt = manifest.built_at;
+
+      session = window.buildSession(manifest, state.pid);
+      state.index = Math.min(state.index, session.items.length);
+
+      document.getElementById("loading").hidden = true;
+      document.getElementById("welcome-body").hidden = false;
+      document.getElementById("question-count").textContent = String(session.items.length);
+      document.getElementById("preview-banner").hidden = !manifest.preview;
+
+      var defs = document.getElementById("criteria-defs");
+      manifest.criteria.forEach(function (criterion) {
+        var row = document.createElement("div");
+        row.appendChild(el("dt", null, criterion.label));
+        row.appendChild(el("dd", null, criterion.hint));
+        defs.appendChild(row);
+      });
+
+      if (CONFIG.contact) {
+        var line = document.getElementById("contact");
+        line.hidden = false;
+        line.querySelector("a").href = "mailto:" + CONFIG.contact;
+        line.querySelector("a").textContent = CONFIG.contact;
+      }
+
+      if (state.responses.length && state.index < session.items.length) {
+        var resume = document.getElementById("resume");
+        resume.hidden = false;
+        resume.querySelector("b").textContent = String(state.index);
+      }
+
+      wireOptionGroups();
+    }).catch(function () {
       document.getElementById("loading").innerHTML =
         '<p class="status__title">The questions could not be loaded.</p>' +
-        "<p class=\"note\">Please refresh the page. If it keeps happening the study is " +
-        "probably mid-update &mdash; try again shortly.</p>";
-      return;
-    }
-
-    const saved = load();
-    const stale = saved && saved.builtAt && saved.builtAt !== manifest.built_at;
-    state = saved && saved.responses && !stale ? saved : {
-      pid: newParticipantId(), startedAt: null, index: 0, responses: [], background: {}
-    };
-    state.builtAt = manifest.built_at;
-    session = window.buildSession(manifest, state.pid);
-    state.index = Math.min(state.index, session.items.length);
-
-    document.getElementById("loading").hidden = true;
-    document.getElementById("welcome-body").hidden = false;
-    document.getElementById("preview-banner").hidden = !manifest.preview;
-    document.getElementById("minutes").textContent =
-      String(Math.max(6, Math.round(session.items.length * 0.33))) + " minutes";
-    document.getElementById("question-count").textContent = String(session.items.length);
-
-    if (CONFIG.contact) {
-      const line = document.getElementById("contact");
-      line.hidden = false;
-      line.querySelector("a").href = "mailto:" + CONFIG.contact;
-      line.querySelector("a").textContent = CONFIG.contact;
-    }
-
-    if (state.responses.length && state.index < session.items.length) {
-      const resume = document.getElementById("resume");
-      resume.hidden = false;
-      resume.querySelector("b").textContent = String(state.index);
-    }
-
-    renderPractice();
-    wireOptionGroups();
+        '<p class="note">Please refresh the page. If it keeps happening the study is ' +
+        'probably mid-update &mdash; try again shortly.</p>';
+    });
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    ["welcome", "instructions", "run", "background", "done"].forEach(function (name) {
+    ["welcome", "run", "background", "done"].forEach(function (name) {
       screens[name] = document.getElementById("screen-" + name);
-    });
-    document.getElementById("to-instructions").addEventListener("click", function () {
-      show("instructions");
     });
     document.getElementById("to-run").addEventListener("click", begin);
     document.getElementById("to-done").addEventListener("click", finish);
