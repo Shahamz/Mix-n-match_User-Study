@@ -1,0 +1,10 @@
+# The analysis runs on numpy alone: every test in the pre-registered family is
+# implemented in analysis/stats.py.
+numpy>=1.24
+
+# Optional. Without these the report is still complete; two sections say so.
+#   matplotlib  -> the three figures
+#   pandas + statsmodels -> the participant-clustered GEE logistic model
+matplotlib>=3.7
+pandas>=2.0
+statsmodels>=0.14

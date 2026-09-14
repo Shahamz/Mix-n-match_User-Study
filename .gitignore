@@ -1,0 +1,12 @@
+# ---- study sources (dropped in by hand, NEVER committed) ----------------
+# The raw four-method output tree is ~10 GB+; GitHub Pages caps a site near 1 GB.
+# Only the built WebP under assets/ is published.
+/outputs/
+/configs_for_baseline/
+/mock_root/
+
+# ---- build/analysis scratch -------------------------------------------
+/analysis/out/
+__pycache__/
+*.pyc
+.DS_Store

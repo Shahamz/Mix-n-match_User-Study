@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picture comparison study</title>
+<meta name="description" content="A short, anonymous study comparing ways of drawing one picture from several written descriptions.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Spectral:ital,wght@0,500;0,600;1,400&display=swap">
+<link rel="stylesheet" href="css/study.css">
+</head>
+<body>
+
+<header class="bar" id="bar" hidden>
+  <div class="bar__inner">
+    <span class="bar__mark" id="mark">Picture comparison study</span>
+    <div class="rail" id="rail" aria-hidden="true"></div>
+    <span class="bar__count" id="count" role="status" aria-live="polite"></span>
+  </div>
+</header>
+
+<div class="panel" id="preview-banner" style="padding-block:14px 0" hidden>
+  <div class="status status--warn">
+    <p class="status__title">Preview build</p>
+    <p class="note" style="margin:0">These pictures are placeholders from the test
+      fixture, not real results. Rebuild from the real outputs before sharing this link.</p>
+  </div>
+</div>
+
+<main>
+
+  <!-- ------------------------------------------------------------ welcome -->
+  <section class="panel" id="screen-welcome">
+    <div class="status" id="loading">
+      <p class="status__title"><span class="spinner"></span> Loading the questions&hellip;</p>
+    </div>
+
+    <div id="welcome-body" hidden>
+      <p class="eyebrow">Research study &middot; about 10 minutes</p>
+      <h1>Which picture works better?</h1>
+      <p class="lede">
+        We are testing ways of getting a computer to draw a single picture from several
+        separate written descriptions &mdash; one for the sky, another for what sits
+        underneath it, and so on.
+      </p>
+      <p>
+        Different methods join those pieces together in different ways, and the only
+        real test is whether the result looks right to a person. So we would like your
+        eye. You will see pictures side by side and choose the one that works better.
+        There are no right answers and nothing is being tested about you.
+      </p>
+
+      <dl class="facts">
+        <div><dt>Questions</dt><dd><span id="question-count">30</span>, one screen each</dd></div>
+        <div><dt>Time</dt><dd><span id="minutes">about 10 minutes</span></dd></div>
+        <div><dt>Anonymous</dt><dd>No name, email, sign-in or tracking</dd></div>
+        <div><dt>What we keep</dt><dd>Your choices, how long each took, and your browser type</dd></div>
+      </dl>
+
+      <p class="note">
+        Taking part is voluntary and you can close the tab at any point. The answers are
+        used only to evaluate these methods in academic research, and are reported as
+        totals, never individually.
+      </p>
+      <p class="note" id="contact" hidden>Questions? Write to <a href="#">the researcher</a>.</p>
+
+      <div class="status" id="resume" hidden>
+        <p class="status__title">Welcome back.</p>
+        <p class="note" style="margin:0">
+          You answered <b>0</b> questions earlier and will carry on where you stopped.
+          <button class="opt" id="restart" type="button" style="margin-left:6px">Start over instead</button>
+        </p>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="to-instructions" type="button">I agree &mdash; show me how it works</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- instructions -->
+  <section class="panel panel--wide" id="screen-instructions" hidden>
+    <p class="eyebrow">How to answer</p>
+    <h1>Go with your first impression</h1>
+    <p>
+      Each screen asks one short question, shows a description, and gives you two
+      pictures &mdash; occasionally four. Pick the one that answers the question better.
+      A few seconds per screen is exactly right; deliberating rarely helps.
+    </p>
+
+    <dl class="facts">
+      <div>
+        <dt>Whole or part</dt>
+        <dd>Some questions show a complete picture. Others show a single part of one,
+            and a small diagram beside the description marks which part.</dd>
+      </div>
+      <div>
+        <dt>Shapes differ</dt>
+        <dd>Pictures in a pair are often different shapes or sizes. That comes from how
+            each method works, not from a mistake. Judge what is in them.</dd>
+      </div>
+      <div>
+        <dt>Four pictures</dt>
+        <dd>Now and then you will pick the best of four, then the worst of the rest.</dd>
+      </div>
+      <div>
+        <dt>Keyboard</dt>
+        <dd>A and B, or the arrow keys. Number keys 1 to 4 when there are four.</dd>
+      </div>
+    </dl>
+
+    <h2>Try one</h2>
+    <p class="note">This practice question is not counted.</p>
+    <div id="practice"></div>
+
+    <div class="actions" id="practice-done" hidden>
+      <button class="btn" id="to-run" type="button">Start the questions</button>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- run -->
+  <section id="screen-run" hidden>
+    <div id="stage"></div>
+  </section>
+
+  <!-- --------------------------------------------------------- background -->
+  <section class="panel" id="screen-background" hidden>
+    <p class="eyebrow">Last screen</p>
+    <h1>Two optional questions</h1>
+    <p class="lede">Both can be skipped. They only help us see whether different people
+      tend to answer differently.</p>
+
+    <div class="field">
+      <p class="field__label" id="familiarity-label">How familiar are you with AI image generation?</p>
+      <div class="opts" data-group="familiarity" role="group" aria-labelledby="familiarity-label">
+        <button class="opt" type="button" data-value="never" aria-pressed="false">Never used it</button>
+        <button class="opt" type="button" data-value="tried" aria-pressed="false">Tried it a few times</button>
+        <button class="opt" type="button" data-value="regular" aria-pressed="false">Use it regularly</button>
+        <button class="opt" type="button" data-value="professional" aria-pressed="false">I work with it</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <p class="field__label" id="device-label">What are you looking at this on?</p>
+      <div class="opts" data-group="device" role="group" aria-labelledby="device-label">
+        <button class="opt" type="button" data-value="phone" aria-pressed="false">Phone</button>
+        <button class="opt" type="button" data-value="tablet" aria-pressed="false">Tablet</button>
+        <button class="opt" type="button" data-value="laptop" aria-pressed="false">Laptop</button>
+        <button class="opt" type="button" data-value="monitor" aria-pressed="false">Large monitor</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn" id="to-done" type="button">Finish and send</button>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------------- done -->
+  <section class="panel" id="screen-done" hidden>
+    <p class="eyebrow">Finished</p>
+    <h1>Thank you &mdash; genuinely.</h1>
+    <p class="lede">
+      Judgements like yours are the only way to tell whether this actually looks better
+      to people, rather than merely scoring better on a metric. You have just done the
+      part that no benchmark can do.
+    </p>
+
+    <div class="status" id="submit-status">
+      <p class="status__title">Preparing&hellip;</p>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn--quiet" id="download" type="button" hidden>Download my answers</button>
+    </div>
+
+    <p class="note">
+      Your answers carry no name, email or account, and are reported only as totals
+      across everyone who took part.
+    </p>
+  </section>
+
+</main>
+
+<footer>
+  An academic user study. Pictures were generated by several research methods and are
+  shown unlabelled so that the comparison stays fair.
+</footer>
+
+<script src="js/config.js"></script>
+<script src="js/sampler.js"></script>
+<script src="js/submit.js"></script>
+<script src="js/study.js"></script>
+</body>
+</html>
