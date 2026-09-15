@@ -535,12 +535,19 @@ CRITERIA = [
     {"id": "overall",
      "label": "Overall quality",
      "question": "Which image looks better overall?",
-     "hint": "Judge it as a picture: detail, colour, anything that looks wrong or broken."},
+     "hint": "Judge it as a picture: detail, colour, and anything that looks wrong, "
+             "blurry or broken."},
     {"id": "seamless",
      "label": "Seamlessness",
      "question": "Which image blends together more seamlessly?",
-     "hint": "Each picture was assembled from separately generated parts. Look for visible "
-             "joins, abrupt changes in lighting or texture, and edges that do not line up."},
+     "hint": "Look at where the parts meet. Are there visible joins, hard edges, or "
+             "abrupt changes in texture where one region ends and the next begins?"},
+    {"id": "coherence",
+     "label": "Overall coherence",
+     "question": "Which image makes more sense as a single scene?",
+     "hint": "Ignore the joins themselves and the picture quality. Ask whether the parts "
+             "belong together: consistent lighting, scale and perspective, and a scene "
+             "that holds together rather than unrelated things placed side by side."},
     {"id": "alignment",
      "label": "Prompt alignment",
      "question": "Which image matches all of the descriptions better?",

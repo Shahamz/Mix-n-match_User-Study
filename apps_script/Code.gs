@@ -31,8 +31,8 @@ var ANSWER_HEADERS = [
   'received_at', 'participant', 'item_id', 'set', 'config', 'seed',
   'num_crops', 'tiles_per_crop', 'combination',
   'a_method', 'b_method',
-  'overall', 'seamless', 'alignment',
-  'win_overall', 'win_seamless', 'win_alignment',
+  'overall', 'seamless', 'coherence', 'alignment',
+  'win_overall', 'win_seamless', 'win_coherence', 'win_alignment',
   'position', 'ms', 'answered_at'
 ];
 
@@ -133,9 +133,11 @@ function writeAnswers(data) {
       answer.b_method || '',
       picks.overall || '',
       picks.seamless || '',
+      picks.coherence || '',
       picks.alignment || '',
       wins.overall || '',
       wins.seamless || '',
+      wins.coherence || '',
       wins.alignment || '',
       valueOr(answer.position),
       valueOr(answer.ms),

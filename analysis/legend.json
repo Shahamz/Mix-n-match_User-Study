@@ -9,6 +9,7 @@
   "criteria": [
     "overall",
     "seamless",
+    "coherence",
     "alignment"
   ]
 }

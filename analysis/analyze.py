@@ -41,7 +41,7 @@ PRETTY = {
     "tiled_diffusion": "Tiled Diffusion",
 }
 CRITERION_LABEL = {"overall": "Overall quality", "seamless": "Seamlessness",
-                   "alignment": "Prompt alignment"}
+                   "coherence": "Overall coherence", "alignment": "Prompt alignment"}
 
 
 # =========================================================================== #
@@ -183,10 +183,11 @@ def tidy(payloads, manifest, legend):
 # quality control
 # =========================================================================== #
 
-def quality_control(records, fast_ms=1500, slow_ms=300_000):
+def quality_control(records, fast_ms=2000, slow_ms=300_000):
     """
     With one question format there are no attention checks. What remains is speed
-    and whether someone simply pressed the same button every time.
+    and whether someone simply pressed the same button every time. The floor scales
+    with the number of criteria: four judgements on one pair take a moment.
     """
     by_participant = defaultdict(list)
     for record in records:
@@ -567,11 +568,11 @@ def simulate(manifest, legend, participants, seed=11):
 
     # true P(we win | decided), per baseline per criterion
     truth = {
-        "mnm_baseline":       {"overall": 0.70, "seamless": 0.86, "alignment": 0.58},
-        "regional_prompting": {"overall": 0.60, "seamless": 0.64, "alignment": 0.57},
-        "tiled_diffusion":    {"overall": 0.66, "seamless": 0.78, "alignment": 0.55},
+        "mnm_baseline":       {"overall": 0.70, "seamless": 0.86, "coherence": 0.81, "alignment": 0.58},
+        "regional_prompting": {"overall": 0.60, "seamless": 0.64, "coherence": 0.62, "alignment": 0.57},
+        "tiled_diffusion":    {"overall": 0.66, "seamless": 0.78, "coherence": 0.74, "alignment": 0.55},
     }
-    tie_rate = {"overall": 0.12, "seamless": 0.09, "alignment": 0.20}
+    tie_rate = {"overall": 0.12, "seamless": 0.09, "coherence": 0.14, "alignment": 0.20}
     side_bias_strength = 0.04
     per_person = min(manifest.get("session", {}).get("items_per_participant", 30),
                      len(manifest["items"]))

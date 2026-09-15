@@ -118,16 +118,20 @@ once the real outputs land, then rebuild.
 ## What the study asks
 
 **One question, thirty times.** Every screen shows two assembled images — ours against
-one randomly chosen baseline's — and asks three things about them:
+one randomly chosen baseline's — and asks four things about them:
 
 | Criterion | The question | What it measures |
 |---|---|---|
-| Overall quality | Which image looks better overall? | The picture as a picture |
-| Seamlessness | Which image blends together more seamlessly? | Visible joins, mismatched lighting, edges that do not line up — the thing this project is actually for |
+| Overall quality | Which image looks better overall? | The picture as a picture: detail, colour, artefacts |
+| Seamlessness | Which image blends together more seamlessly? | **Local.** Visible joins and hard edges where regions meet |
+| Overall coherence | Which image makes more sense as a single scene? | **Global.** Whether the parts belong together at all — consistent lighting, scale and perspective — regardless of how cleanly they are joined |
 | Prompt alignment | Which image matches all of the descriptions better? | Whether every described part is present |
 
+Seamlessness and coherence are deliberately separate: an image can be flawlessly blended
+and still make no sense as a scene, and a sensible scene can have obvious joins.
+
 Each is answered **A wins / Tie / B wins**. Which method is shown as A is randomised per
-participant, so neither side is fixed. All three criteria are answered on the same pair,
+participant, so neither side is fixed. All four criteria are answered on the same pair,
 which makes them exactly paired for the analysis.
 
 Recorded per answer: participant id, config prefix, seed, cropping set, region and option

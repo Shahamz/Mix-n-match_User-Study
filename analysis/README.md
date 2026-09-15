@@ -37,19 +37,23 @@ p-values interpretable; adding tests afterwards and reporting the best one does 
 ### The question every participant answers
 
 One format, thirty times: our assembled image against one randomly chosen baseline's,
-judged on three criteria — **overall quality**, **seamlessness**, **prompt alignment** —
-each answered *A wins* / *Tie* / *B wins*. Which method is shown as A is randomised per
-participant.
+judged on four criteria — **overall quality**, **seamlessness**, **overall coherence**,
+**prompt alignment** — each answered *A wins* / *Tie* / *B wins*. Which method is shown
+as A is randomised per participant.
+
+Seamlessness and coherence are deliberately separate: the first is local (visible joins
+where regions meet), the second is global (whether the scene holds together at all).
+A composite can be flawlessly blended and still make no sense, and vice versa.
 
 ### Primary hypothesis
 
 Mix-n-match is preferred to each of the three baselines more often than chance, on each
-of the three criteria.
+of the four criteria.
 
-### Primary family — 9 tests, Holm-adjusted
+### Primary family — 12 tests, Holm-adjusted
 
-Three baselines × three criteria. Exact two-sided binomial test against 0.5 on the
-**decided** judgements, Wilson 95% intervals, Holm–Bonferroni across the nine.
+Three baselines × four criteria. Exact two-sided binomial test against 0.5 on the
+**decided** judgements, Wilson 95% intervals, Holm–Bonferroni across the twelve.
 
 **Ties are dropped, not split.** A tie says the two images were indistinguishable on
 that criterion, not that one won half of the time; splitting invents comparisons nobody
@@ -62,8 +66,8 @@ q-values, and must be described as such.
 ### Exclusions, decided in advance
 
 There are no attention checks: with a single question format there is nowhere to hide
-one. A participant is dropped if their median time per image pair is under 1.5 seconds
-(three criteria cannot be judged faster than that), if they choose the same side on more
+one. A participant is dropped if their median time per image pair is under 2 seconds
+(four criteria cannot be judged faster than that), if they choose the same side on more
 than 95% of at least fifteen decided judgements, or if they give the identical answer to
 every single criterion across a full session. `--keep-excluded` reruns everything
 without these rules; report both if the conclusion changes.
@@ -71,7 +75,7 @@ without these rules; report both if the conclusion changes.
 ### Target sample
 
 For a true win rate of 0.60, 80% power at α = 0.05 needs ≈194 decided judgements per
-cell. Each participant contributes roughly 10 pairs per baseline × 3 criteria, minus
+cell. Each participant contributes roughly 10 pairs per baseline × 4 criteria, minus
 ties, so plan for **at least 25–30 completed sessions**; `summary.md` prints the full
 table.
 
@@ -82,9 +86,9 @@ table.
 | Section | What it answers |
 |---|---|
 | Who is in the analysis | Sample size, exclusions and why |
-| Primary | The nine pre-registered win rates, Holm-adjusted, with tie rates |
+| Primary | The twelve pre-registered win rates, Holm-adjusted, with tie rates |
 | Pooled over the three baselines | Where the advantage is largest across criteria |
-| Paired contrasts (McNemar) | **The strongest evidence here.** All three criteria are answered on the *same* pair of images by the *same* person, so they are exactly paired: this asks whether the advantage on seamlessness really differs from the advantage on prompt alignment. Also, paired by config and by participant, whether the advantage over one baseline differs from another |
+| Paired contrasts (McNemar) | **The strongest evidence here.** All four criteria are answered on the *same* pair of images by the *same* person, so they are exactly paired: this asks whether the advantage on seamlessness really differs from the advantage on coherence, or on prompt alignment. Also, paired by config and by participant, whether the advantage over one baseline differs from another |
 | Overall ranking | Bradley–Terry over every decided judgement, bootstrap intervals |
 | Bias checks | Side bias from the display, and whether the advantage drifts as a session wears on |
 | Agreement | Krippendorff's α and Fleiss' κ over win/loss/tie. Low agreement here is a finding, not a failure: it means the methods are close |

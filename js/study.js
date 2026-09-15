@@ -99,6 +99,7 @@
   /* ------------------------------------------------------------ the item -- */
 
   var SIDES = ["A", "B"];
+  var WORDS = ["none", "one", "two", "three", "four", "five", "six"];
 
   function renderPair(entry) {
     var pair = el("div", "pair");
@@ -187,9 +188,11 @@
        breaking that. */
     var codeA = item.options[entry.order[0]].m;
     var codeB = item.options[entry.order[1]].m;
+    var picks = {};
     var winners = {};
     manifest.criteria.forEach(function (criterion) {
       var pick = answers[criterion.id];
+      picks[criterion.id] = pick;
       winners[criterion.id] = pick === "tie" ? "tie" : (pick === "A" ? codeA : codeB);
     });
 
@@ -205,11 +208,7 @@
       b: entry.order[1],
       a_method: codeA,
       b_method: codeB,
-      answers: {
-        overall: answers.overall,
-        seamless: answers.seamless,
-        alignment: answers.alignment
-      },
+      answers: picks,
       winners: winners,
       position: state.index,
       ms: Date.now() - shownAt,
@@ -237,7 +236,8 @@
     var next = el("button", "btn", "Next question");
     next.type = "button";
     next.disabled = true;
-    var left = el("p", "left", "Answer all three to continue.");
+    var left = el("p", "left",
+      "Answer all " + WORDS[manifest.criteria.length] + " to continue.");
 
     stage.appendChild(renderCriteria(function () {
       var missing = manifest.criteria.filter(function (criterion) {
@@ -331,6 +331,10 @@
       document.getElementById("loading").hidden = true;
       document.getElementById("welcome-body").hidden = false;
       document.getElementById("question-count").textContent = String(session.items.length);
+      var count = manifest.criteria.length;
+      document.querySelectorAll("[data-criteria-count]").forEach(function (node) {
+        node.textContent = WORDS[count] || String(count);
+      });
       document.getElementById("preview-banner").hidden = !manifest.preview;
 
       var defs = document.getElementById("criteria-defs");
