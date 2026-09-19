@@ -5,10 +5,11 @@ Paired analysis of the Mix-n-match user study.
     python analysis/analyze.py --responses answers.csv
     python analysis/analyze.py --simulate 40            # synthetic data, exercises every test
 
-Every question in the study is the same: our composite against one baseline's, judged
-on three criteria (overall quality, seamlessness, prompt alignment) with A / Tie / B.
-Because all three criteria are answered on the *same* pair of images by the same
-person, the criteria are exactly paired, which is what the McNemar section uses.
+Every question in the study is the same: a set of our composites against the matching
+set of one baseline's (the same tile combinations, image for image), judged on four
+criteria (overall quality, seamlessness, overall coherence, prompt alignment) with
+A / Tie / B. Because all four criteria are answered on the *same* pair of sets by the
+same person, the criteria are exactly paired, which is what the McNemar section uses.
 
 Reads the responses alongside data/manifest.json (what each question was) and
 analysis/legend.json (which code was which method), and writes analysis/out/.
@@ -117,7 +118,7 @@ def load_submissions(path):
 def tidy(payloads, manifest, legend):
     """
     One record per (answer x criterion). `outcome` is from our side: win, loss or tie.
-    `response` groups the three criteria that were answered on one pair of images.
+    `response` groups the criteria that were answered on one pair of image sets.
     """
     items = {item["id"]: item for item in manifest["items"]}
     methods = legend["methods"]
@@ -610,7 +611,7 @@ def simulate(manifest, legend, participants, seed=11):
                 "id": item["id"], "set": item["set"], "config": item["config"],
                 "seed": item.get("seed"), "num_crops": item.get("num_crops"),
                 "tiles_per_crop": item.get("tiles_per_crop"),
-                "combination": item.get("combination"),
+                "combinations": item.get("combinations"),
                 "a": order[0], "b": order[1], "a_method": code_a, "b_method": code_b,
                 "answers": picks, "winners": winners, "position": position,
                 "ms": rng.randint(400, 1200) if careless else rng.randint(4000, 22000),
@@ -707,8 +708,8 @@ def main():
     add("Source: %s. Item bank built %s.\n"
         % ("simulated data" if args.simulate else str(args.responses),
            manifest.get("built_at", "?")))
-    add("Every question compares our assembled image against one baseline's, judged on "
-        "three criteria with A / Tie / B. Win rates below are among **decided** "
+    add("Every question compares a set of our assembled images against the matching set "
+        "of one baseline's, judged on four criteria with A / Tie / B. Win rates below are among **decided** "
         "judgements; ties are reported separately rather than split.\n")
 
     pairs_kept = len({r["response"] for r in kept})
@@ -763,7 +764,7 @@ def main():
 
     # -- McNemar ------------------------------------------------------------ #
     add("## Paired contrasts (McNemar)\n")
-    add("All three criteria are answered on the same pair of images by the same person, "
+    add("All four criteria are answered on the same pair of image sets by the same person, "
         "so they are exactly paired. Judgements where either side was a tie carry no "
         "direction and are dropped from the pair.\n")
     add("| contrast | units | b | c | discordant | statistic | p | method |")

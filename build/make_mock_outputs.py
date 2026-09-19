@@ -60,7 +60,7 @@ MOCK_CONFIGS = {
     "static": [
         # (num_crops, tiles_per_crop, crops, background_prompt, subject words)
         (3, 3, vertical_bands([300, 460, 264]), "A tall lighthouse on a rocky shore", "lighthouse"),
-        (2, 2, vertical_bands([512, 512]), "A desert highway at sunset", "highway"),
+        (2, 3, vertical_bands([512, 512]), "A desert highway at sunset", "highway"),
         (4, 2, [  # a 2x2 grid: tiles the canvas, but not as a vertical chain
             {"x": 0, "y": 0, "width": 512, "height": 512},
             {"x": 512, "y": 0, "width": 512, "height": 512},
@@ -78,6 +78,13 @@ MOCK_CONFIGS = {
             {"x": 540, "y": 120, "width": 400, "height": 300},
             {"x": 240, "y": 600, "width": 560, "height": 300},
         ], "A bustling night market", "market"),
+    ],
+    # An extra set of the dynamic kind, so the build's configs_for_baseline_* discovery is exercised.
+    "dynamic_fs": [
+        (2, 3, [
+            {"x": 100, "y": 60, "width": 820, "height": 400},
+            {"x": 200, "y": 560, "width": 600, "height": 400},
+        ], "A quiet harbour at dawn", "harbour"),
     ],
 }
 
@@ -354,7 +361,7 @@ def main():
             config = build_config(set_name, index, spec)
             filename = f"config_{index}"
             (config_dir / f"{filename}.json").write_text(json.dumps(config, indent=2))
-            write_mix_n_match(config, mnm_root, wobble=(set_name == "dynamic"))
+            write_mix_n_match(config, mnm_root, wobble=set_name.startswith("dynamic"))
             write_mnm_baseline(config, mnm_root)
             write_tiled_diffusion(config, filename, td_root)
             write_regional_prompting(config, rp_root)

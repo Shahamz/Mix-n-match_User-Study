@@ -29,7 +29,7 @@ var SUMMARY_HEADERS = [
 
 var ANSWER_HEADERS = [
   'received_at', 'participant', 'item_id', 'set', 'config', 'seed',
-  'num_crops', 'tiles_per_crop', 'combination',
+  'num_crops', 'tiles_per_crop', 'combinations',
   'a_method', 'b_method',
   'overall', 'seamless', 'coherence', 'alignment',
   'win_overall', 'win_seamless', 'win_coherence', 'win_alignment',
@@ -128,7 +128,8 @@ function writeAnswers(data) {
       valueOr(answer.seed),
       valueOr(answer.num_crops),
       valueOr(answer.tiles_per_crop),
-      (answer.combination || []).join('|'),
+      /* One tile index per crop joined by '|', one combination per image joined by ';'. */
+      (answer.combinations || []).map(function (c) { return c.join('|'); }).join(';'),
       answer.a_method || '',
       answer.b_method || '',
       picks.overall || '',

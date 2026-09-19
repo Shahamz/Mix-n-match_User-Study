@@ -1,10 +1,10 @@
 /* ---------------------------------------------------------------------------
  * Draws one participant's session out of the item bank.
  *
- * Every item in the bank is the same question: our composite against one
- * baseline's, judged on three criteria. The draw picks which comparisons this
- * participant gets, spread across configs and balanced across the baselines,
- * and decides which picture is shown as A and which as B.
+ * Every item in the bank is the same question: a set of our composites against
+ * the matching set of one baseline's, judged on four criteria. The draw picks
+ * which comparisons this participant gets, spread across configs and balanced
+ * across the baselines, and decides which set is shown as A and which as B.
  *
  * Seeded from the participant id, so a refresh mid-study rebuilds the same
  * sequence rather than starting a different one.

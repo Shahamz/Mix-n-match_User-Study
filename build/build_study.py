@@ -13,7 +13,7 @@ Outputs
     data/manifest.json      the item bank (public; methods appear only as codes M1..M4)
     data/legend.json        code -> method, and the attention-check answers (NOT served)
     data/build_report.json  what was built, what was skipped and why
-    assets/{tile,comp}/*.webp
+    assets/{comp,thumb}/*.webp
 
 Source-of-truth for the on-disk formats (do not edit those repos):
     Mix_n_match/vis_app.py          save_separate_tiles, crop_regions, assemble_combination
@@ -44,6 +44,9 @@ PATCH = 16                  # Mix_n_match/macros.py: PATCH_SIZE_PIXELS
 # background image to fill what they leave.
 UNCOVERED = (0, 0, 0)
 SETS = ("static", "dynamic")
+# A config set lives in configs_for_baseline_<name>/, and its runs in folders of the same name. <name> is a
+# cropping kind of SETS, optionally followed by _<anything> (static_2, dynamic_fs): more configs of that kind.
+SET_FOLDER_PREFIX = "configs_for_baseline_"
 REFERENCE = "mix_n_match"
 BASELINES = ("mnm_baseline", "regional_prompting", "tiled_diffusion")
 ALL_METHODS = (REFERENCE,) + BASELINES
@@ -148,15 +151,30 @@ def find_regional_prompting(outputs, set_folder, prefix):
     return Run("regional_prompting", path=run, extra={"layout": layout})
 
 
+def set_folders(configs):
+    """
+    Every configs_for_baseline_* folder under the config root. The plain static and dynamic sets come first,
+    in that order, so adding a set appends to the item bank rather than redrawing it.
+    """
+    found = {path.name for path in configs.glob(f"{SET_FOLDER_PREFIX}*") if path.is_dir()}
+    first = [f"{SET_FOLDER_PREFIX}{kind}" for kind in SETS if f"{SET_FOLDER_PREFIX}{kind}" in found]
+    return first + sorted(found - set(first))
+
+
 def discover(root, config_dir, outputs_dir):
     configs = root / config_dir
     outputs = root / outputs_dir
     entries, problems = [], []
-    for set_name in SETS:
-        set_folder = f"configs_for_baseline_{set_name}"
+    folders = set_folders(configs)
+    if not folders:
+        problems.append(f"no {SET_FOLDER_PREFIX}* config folder under {configs}")
+    for set_folder in folders:
         folder = configs / set_folder
-        if not folder.is_dir():
-            problems.append(f"{set_folder}: no config folder at {folder}")
+        # The item's "set" is the cropping kind (analysis and composite_sets group by it); the folder is only
+        # where the config and its runs are.
+        set_name = set_folder[len(SET_FOLDER_PREFIX):].split("_")[0]
+        if set_name not in SETS:
+            problems.append(f"{set_folder}: the set name must start with one of {list(SETS)}")
             continue
         for config_path in sorted(folder.glob("config_*.json"), key=natural_key):
             try:
@@ -503,19 +521,13 @@ class Assets:
         self.seen = {}
         self.bytes_written = 0
 
-    def add(self, image, width):
-        """
-        Encode `image` at exactly `width` pixels across, keeping its aspect ratio.
-
-        Both pictures in a pair are encoded at the same width, so the comparison is
-        at one scale. Height is left free: a Tiled Diffusion stack is genuinely
-        taller than a square canvas and is shown that way rather than squashed.
-        """
+    def encode(self, image, width, folder):
+        """Write `image` at exactly `width` pixels across, keeping its aspect ratio."""
         if image.width != width:
             height = max(1, round(image.height * width / image.width))
             image = image.resize((width, height), Image.LANCZOS)
         digest = hashlib.sha1(image.tobytes() + repr(image.size).encode()).hexdigest()[:16]
-        relative = f"assets/comp/{digest}.webp"
+        relative = f"assets/{folder}/{digest}.webp"
         if relative not in self.seen:
             path = self.out / relative
             if not self.dry_run:
@@ -523,35 +535,51 @@ class Assets:
                 image.save(path, "WEBP", quality=self.settings["quality"], method=5)
                 self.bytes_written += path.stat().st_size
             self.seen[relative] = image.size
-        return {"src": relative, "w": image.size[0], "h": image.size[1]}
+        return relative, image.size
+
+    def add(self, image):
+        """
+        One composite, at full size for the enlarged view and as a thumbnail for the grid.
+
+        Every picture is encoded at the same width, so the comparison is at one scale.
+        Height is left free: a Tiled Diffusion stack is genuinely taller than a square
+        canvas and is shown that way rather than squashed.
+        """
+        src, (width, height) = self.encode(image, self.settings["composite_width"], "comp")
+        thumb, (thumb_width, _) = self.encode(image, self.settings["thumb_width"], "thumb")
+        return {"src": src, "w": width, "h": height, "thumb": thumb, "tw": thumb_width}
 
 
 # =========================================================================== #
 # item bank
 # =========================================================================== #
 
-# One question, three criteria. Every screen in the study is this and nothing else.
+# One question, four criteria, each judged on a whole set of images rather than on one picture. Every
+# screen in the study is this and nothing else.
 CRITERIA = [
     {"id": "overall",
      "label": "Overall quality",
-     "question": "Which image looks better overall?",
-     "hint": "Judge it as a picture: detail, colour, and anything that looks wrong, "
-             "blurry or broken."},
+     "question": "Which set of images looks better overall?",
+     "hint": "Judge each set as a whole, taking all of its images together: detail, colour, "
+             "and anything that looks wrong, blurry or broken."},
     {"id": "seamless",
      "label": "Seamlessness",
-     "question": "Which image blends together more seamlessly?",
-     "hint": "Look at where the parts meet. Are there visible joins, hard edges, or "
-             "abrupt changes in texture where one region ends and the next begins?"},
+     "question": "Which set blends together more seamlessly?",
+     "hint": "Across the images in each set, look at where the parts meet. Are there visible "
+             "joins, hard edges, or abrupt changes in texture where one region ends and the "
+             "next begins?"},
     {"id": "coherence",
      "label": "Overall coherence",
-     "question": "Which image makes more sense as a single scene?",
-     "hint": "Ignore the joins themselves and the picture quality. Ask whether the parts "
-             "belong together: consistent lighting, scale and perspective, and a scene "
-             "that holds together rather than unrelated things placed side by side."},
+     "question": "In which set do the images make more sense as single scenes?",
+     "hint": "Ignore the joins themselves and the picture quality. Across each set, ask "
+             "whether the parts of each image belong together: consistent lighting, scale "
+             "and perspective, and a scene that holds together rather than unrelated things "
+             "placed side by side."},
     {"id": "alignment",
      "label": "Prompt alignment",
-     "question": "Which image matches all of the descriptions better?",
-     "hint": "Every description below should be visible somewhere in the picture."},
+     "question": "Which set matches its descriptions better?",
+     "hint": "Each numbered image has its own descriptions, the same for that number in both "
+             "sets. Every description should be visible somewhere in its image."},
 ]
 
 
@@ -563,8 +591,8 @@ def real_crops(entry):
 
 class Builder:
     """
-    Builds the item bank: one composite of ours against one composite of a single
-    baseline, judged on three criteria. Nothing else.
+    Builds the item bank: a set of our composites against the matching set of a single
+    baseline's, judged on four criteria. Nothing else.
     """
 
     def __init__(self, entries, config, out, dry_run):
@@ -572,7 +600,7 @@ class Builder:
         self.config = config
         self.assets = Assets(out, config["assets"], dry_run)
         self.mat = tuple(config["assets"]["background"])
-        self.width = config["assets"]["composite_width"]
+        self.per_method = config["combinations_per_method"]
         self.rng = random.Random(config["seed"])
         self.items = []
         self.report = defaultdict(list)
@@ -582,17 +610,37 @@ class Builder:
         self.report[f"{entry.set_name}/{entry.prefix}"].append(
             {"method": method, "skipped": reason})
 
-    def combination(self, entry):
-        return [self.rng.randrange(entry.tiles_per_crop) for _ in range(entry.num_crops)]
+    def combinations(self, entry):
+        """
+        Up to `combinations_per_method` distinct tile combinations, one tile index per crop. Distinct over
+        the crops that carry prompts, so no two images in a set illustrate the same descriptions; the
+        background crop's index only matters to some methods and is drawn freely.
+        """
+        crops = real_crops(entry)
+        possible = entry.tiles_per_crop ** len(crops)
+        wanted = min(self.per_method, possible)
+        chosen, seen = [], set()
+        while len(chosen) < wanted:
+            combination = [self.rng.randrange(entry.tiles_per_crop) for _ in range(entry.num_crops)]
+            key = tuple(combination[i] for i in crops)
+            if key not in seen:
+                seen.add(key)
+                chosen.append(combination)
+        return chosen
 
     def prompts(self, entry, combination):
         return [entry.prompt(i, combination[i]) for i in real_crops(entry)]
 
-    def emit(self, entry, baseline, ours, theirs, combination, flags):
+    def render_set(self, entry, method, combinations):
+        """One composite per combination, in the given order, or None if any of them cannot be made."""
+        images = [render_composite(entry, method, combination, self.mat) for combination in combinations]
+        return None if any(image is None for image in images) else images
+
+    def emit(self, entry, baseline, ours, theirs, combinations, flags):
         """
-        One comparison. Both pictures are encoded at the same width; which of them is
-        shown first is decided here and again per participant, so neither method sits
-        on a fixed side.
+        One comparison of two sets. Image i of each set is the same combination i, so the two sets
+        illustrate exactly the same descriptions in the same order. Which set is shown first is decided
+        here and again per participant, so neither method sits on a fixed side.
         """
         self.counter += 1
         options = [(REFERENCE, ours), (baseline, theirs)]
@@ -604,11 +652,11 @@ class Builder:
             "seed": entry.config.get("seed"),
             "num_crops": entry.num_crops,
             "tiles_per_crop": entry.tiles_per_crop,
-            "combination": combination,
+            "combinations": combinations,
             "background_prompt": entry.config["background_prompt"],
-            "prompts": self.prompts(entry, combination),
-            "options": [{"m": METHOD_CODE[method], **self.assets.add(image, self.width)}
-                        for method, image in options],
+            "prompts": [self.prompts(entry, combination) for combination in combinations],
+            "options": [{"m": METHOD_CODE[method], "images": [self.assets.add(image) for image in images]}
+                        for method, images in options],
             "flags": flags,
         })
 
@@ -643,19 +691,22 @@ class Builder:
                     "canvas": list(layout["canvas"]), "from": layout["source"]}
 
             for _ in range(pairs_per_config):
-                # One set of tile choices per round, shared by every baseline, so the
-                # comparisons in that round show the same descriptions.
-                combination = self.combination(entry)
-                ours = render_composite(entry, REFERENCE, combination, self.mat)
+                # One list of tile combinations per round, shared by every method in the same order, so
+                # every comparison in that round shows the same descriptions image for image.
+                combinations = self.combinations(entry)
+                if len(combinations) < self.per_method:
+                    self.note(entry, REFERENCE, f"only {len(combinations)} distinct combinations exist; "
+                                                f"showing {len(combinations)} per method")
+                ours = self.render_set(entry, REFERENCE, combinations)
                 if ours is None:
                     self.note(entry, REFERENCE, "a tile referenced by the layout is missing")
                     break
                 for baseline in usable:
-                    theirs = render_composite(entry, baseline, combination, self.mat)
+                    theirs = self.render_set(entry, baseline, combinations)
                     if theirs is None:
                         self.note(entry, baseline, "a tile the composite needs is missing")
                         continue
-                    self.emit(entry, baseline, ours, theirs, combination, flags)
+                    self.emit(entry, baseline, ours, theirs, combinations, flags)
 
 
 def summarise(items):
@@ -682,6 +733,9 @@ def main():
     args = parser.parse_args()
 
     settings = yaml.safe_load(args.config.read_text())
+    settings.setdefault("combinations_per_method", 4)
+    if settings["combinations_per_method"] < 1:
+        parser.error("combinations_per_method must be at least 1")
     root = args.root or Path(settings.get("root", "."))
     if args.seed is not None:
         settings["seed"] = args.seed
@@ -703,7 +757,8 @@ def main():
     builder.run()
     counts = summarise(builder.items)
 
-    print(f"\nitem bank: {counts['total']} comparisons over {counts['configs']} configs")
+    print(f"\nitem bank: {counts['total']} comparisons over {counts['configs']} configs, "
+          f"{settings['combinations_per_method']} combinations per method")
     for key, value in sorted(counts["by_set"].items()):
         print(f"  {key + ' set':22s} {value}")
     print("\ncomparisons against the reference method")
@@ -723,7 +778,7 @@ def main():
         return 0
 
     manifest = {
-        "version": 1,
+        "version": 2,
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         # Marks a build made from the test fixture, so a preview cannot go live
         # looking like the real thing.
@@ -731,6 +786,7 @@ def main():
         "seed": settings["seed"],
         "session": settings["session"],
         "reference_code": METHOD_CODE[REFERENCE],
+        "combinations_per_method": settings["combinations_per_method"],
         "criteria": CRITERIA,
         "counts": counts,
         "items": builder.items,

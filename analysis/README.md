@@ -36,8 +36,9 @@ p-values interpretable; adding tests afterwards and reporting the best one does 
 
 ### The question every participant answers
 
-One format, thirty times: our assembled image against one randomly chosen baseline's,
-judged on four criteria — **overall quality**, **seamlessness**, **overall coherence**,
+One format, thirty times: a set of our assembled images against the matching set of one
+randomly chosen baseline's (the same tile combinations, image for image), judged as sets
+on four criteria — **overall quality**, **seamlessness**, **overall coherence**,
 **prompt alignment** — each answered *A wins* / *Tie* / *B wins*. Which method is shown
 as A is randomised per participant.
 

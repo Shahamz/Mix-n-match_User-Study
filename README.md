@@ -33,6 +33,10 @@ outputs/
 └── regional_prompting/configs_for_baseline_*/<prefix>/{layout.json, crop<i>/tile<j>.png}
 ```
 
+Every `configs_for_baseline_*` folder is used. Extra sets such as `configs_for_baseline_static_2` or
+`configs_for_baseline_dynamic_fs` are read from their own folders but counted as the kind their name starts
+with (`static` / `dynamic`), which is what the items' `set` field and the analysis group by.
+
 Both are **gitignored on purpose**. The raw tree runs to many gigabytes; GitHub
 Pages caps a published site near 1 GB, and only the WebP under `assets/` is
 committed. `outputs/_baseline_logs/` and `_baseline_work/` are ignored.
@@ -117,15 +121,27 @@ once the real outputs land, then rebuild.
 
 ## What the study asks
 
-**One question, thirty times.** Every screen shows two assembled images — ours against
-one randomly chosen baseline's — and asks four things about them:
+**One question, thirty times.** Every screen shows two *sets* of assembled images — ours
+against one randomly chosen baseline's — and asks four things about the sets as wholes.
+
+Each set holds `combinations_per_method` images (`build/build_config.yaml`, default 4). Each
+image is one tile combination: one sampled tile per crop. Both sets use **the same
+combinations in the same order**, so image *n* of set A and image *n* of set B illustrate
+exactly the same descriptions. Combinations within a set are distinct. A config with fewer
+distinct combinations than asked for shows all it has, and the build report says so.
 
 | Criterion | The question | What it measures |
 |---|---|---|
-| Overall quality | Which image looks better overall? | The picture as a picture: detail, colour, artefacts |
-| Seamlessness | Which image blends together more seamlessly? | **Local.** Visible joins and hard edges where regions meet |
-| Overall coherence | Which image makes more sense as a single scene? | **Global.** Whether the parts belong together at all — consistent lighting, scale and perspective — regardless of how cleanly they are joined |
-| Prompt alignment | Which image matches all of the descriptions better? | Whether every described part is present |
+| Overall quality | Which set of images looks better overall? | The pictures as pictures: detail, colour, artefacts |
+| Seamlessness | Which set blends together more seamlessly? | **Local.** Visible joins and hard edges where regions meet |
+| Overall coherence | In which set do the images make more sense as single scenes? | **Global.** Whether the parts belong together at all — consistent lighting, scale and perspective — regardless of how cleanly they are joined |
+| Prompt alignment | Which set matches its descriptions better? | Whether every described part is present in its image |
+
+On screen the two sets sit side by side, each a numbered grid (stacked on a phone held
+upright). Selecting a number outlines that image in both sets and shows its descriptions.
+Tapping any image opens a full-screen viewer that flips between set A and set B at the same
+number (tap, the A/B switch, or the A/B/space keys) and steps through the numbers (arrows or
+swipe). On a phone, that viewer is where the close comparison happens.
 
 Seamlessness and coherence are deliberately separate: an image can be flawlessly blended
 and still make no sense as a scene, and a sensible scene can have obvious joins.
@@ -135,7 +151,8 @@ participant, so neither side is fixed. All four criteria are answered on the sam
 which makes them exactly paired for the analysis.
 
 Recorded per answer: participant id, config prefix, seed, cropping set, region and option
-counts, the tile combination, the two method codes, and the winner per criterion.
+counts, the tile combinations (in the Sheet: `|` between crops, `;` between images), the two
+method codes, and the winner per criterion.
 
 ---
 
@@ -169,7 +186,7 @@ method itself would:
 | Naive baseline | Each whole-canvas image resized into its config rectangle and pasted at `(x, y)`. Whatever the rectangles leave uncovered stays **black** — the baseline generates no background image | 1024×1024 |
 | Tiled Diffusion | Exactly as `crop_output.compose_combination` does it, using the placement in `run_meta.json`. It generates each region as a 1024² square and chains them vertically | 1024×(1024·n) |
 
-Both images in a pair are encoded at the **same width**, aspect ratio preserved, height
+Every image is encoded at the **same width** (plus a smaller thumbnail for the grid), aspect ratio preserved, height
 left free. So a Tiled Diffusion stack is genuinely taller than our square canvas and is
 shown that way rather than squashed. `analysis/README.md` lists the caveats that belong
 in the write-up.

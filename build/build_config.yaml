@@ -41,10 +41,20 @@ allow_approximate_stitching: false
 # when a config does not have enough crops/tiles or a run folder is missing.
 # ---------------------------------------------------------------------------
 quotas:
-  # Rounds per config. Each round draws one tile per crop and compares our composite
-  # against every available baseline on that same set of descriptions, so a round
-  # yields up to three comparisons.
+  # Rounds per config. Each round draws `combinations_per_method` tile combinations and
+  # compares our set of composites against every available baseline's set for those same
+  # combinations, so a round yields up to three comparisons.
   pairs_per_baseline: 2
+
+# ---------------------------------------------------------------------------
+# What one question shows.
+# ---------------------------------------------------------------------------
+# How many images each method shows per question. Each image is one tile combination
+# (one tile per crop); both methods in a question show the same combinations in the
+# same order, so image 1 of one set and image 1 of the other illustrate the same
+# descriptions. Combinations within a set are distinct. A config with fewer distinct
+# combinations than this shows all it has (noted in the build report).
+combinations_per_method: 4
 
 # ---------------------------------------------------------------------------
 # Asset encoding. Content-hashed filenames, so identical renders are stored once.
@@ -56,6 +66,9 @@ assets:
   # scale. Height is left free: a Tiled Diffusion stack really is taller than a
   # square canvas and is shown that way rather than squashed.
   composite_width: 860
+  # Grid thumbnails. The full-width image is loaded only when a picture is enlarged
+  # or the screen is wide and dense enough to need it.
+  thumb_width: 480
   background: [246, 246, 248]   # neutral mat behind irregular tiles
 
 # What each participant is served. sampler.js reads this straight from the manifest.
