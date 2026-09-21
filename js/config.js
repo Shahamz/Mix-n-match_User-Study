@@ -21,6 +21,10 @@ window.STUDY_CONFIG = {
 
   manifestUrl: "data/manifest.json",
 
+  /* Grid width of a picture taller than it is wide, as a fraction of its cell. Only
+     Tiled Diffusion's vertical stacks are, and at full width they dwarf the rest. */
+  tallScale: 0.5,
+
   /* How long the chosen picture stays highlighted before the next question. */
   advanceDelayMs: 280
 };

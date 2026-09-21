@@ -243,6 +243,7 @@
       option.images.forEach(function (picture, index) {
         var shot = el("button", "shot");
         shot.type = "button";
+        if (picture.h > picture.w) shot.style.width = (100 * (CONFIG.tallScale || 1)) + "%";
         shot.dataset.index = String(index);
         shot.setAttribute("aria-label", "Set " + label + ", image " + (index + 1) + ". Enlarge");
         var image = new Image();

@@ -110,7 +110,7 @@ p { margin: 0 0 15px; text-wrap: pretty; }
           margin: 0 0 8px 2px; }
 .set__grid { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 6px; align-items: start; }
 
-.shot { position: relative; display: block; width: 100%; padding: 0; margin: 0; font: inherit; cursor: zoom-in;
+.shot { position: relative; display: block; width: 100%; padding: 0; margin: 0 auto; font: inherit; cursor: zoom-in;
         border: 1px solid var(--line); border-radius: 6px; background: var(--mat); overflow: hidden;
         transition: box-shadow .12s ease, border-color .12s ease; }
 .shot__img { width: 100%; height: auto; background: var(--mat); }
