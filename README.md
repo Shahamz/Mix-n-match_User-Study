@@ -187,6 +187,7 @@ method itself would:
 | Tiled Diffusion | Exactly as `crop_output.compose_combination` does it, using the placement in `run_meta.json`. It generates each region as a 1024² square and chains them vertically | 1024×(1024·n) |
 
 Every image is encoded at the **same width** (plus a smaller thumbnail for the grid), aspect ratio preserved, height
-left free. So a Tiled Diffusion stack is genuinely taller than our square canvas and is
-shown that way rather than squashed. `analysis/README.md` lists the caveats that belong
+left free. On the page the two sets split the width in proportion to how wide their pictures are, so a wide
+naive-baseline grid's height matches the side of our square. A Tiled Diffusion stack is genuinely taller than our
+square canvas and is shown that way, at half width (`tallScale`), rather than squashed. `analysis/README.md` lists the caveats that belong
 in the write-up.

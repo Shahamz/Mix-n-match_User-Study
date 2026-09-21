@@ -103,8 +103,8 @@ table.
   ratio.** Its composite is rebuilt exactly as `crop_output.compose_combination`
   builds it, from `tiles/` plus the placement recorded in `run_meta.json`. Because
   it generates every region as a 1024² square and chains them vertically, its image
-  is `1024 × 1024·n` — taller than our square canvas. Both images in a pair are shown
-  at the same width, so its greater height is visible to the participant. Whether
+  is `1024 × 1024·n` — taller than our square canvas. It is shown at half the width
+  of ours, so its greater height is visible to the participant. Whether
   that aspect difference influenced judgements is worth acknowledging.
 - **The naive baseline is shown as a grid of whole images, not one canvas.** It
   generates one plain image per prompt and knows nothing of the layout, so each is

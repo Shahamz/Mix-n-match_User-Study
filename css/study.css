@@ -102,9 +102,11 @@ p { margin: 0 0 15px; text-wrap: pretty; }
 .guide { font-size: 14px; color: var(--muted); margin: 18px 0 10px; }
 
 /* Two sets side by side, each a grid of numbered images. --cols is set per question
-   from how many images a set holds. Every thumbnail is the same width, so both sets
-   are judged at one scale; a taller method's images are shown taller, not squashed. */
-.sets { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(12px, 2vw, 22px); align-items: start; margin: 0 0 6px; }
+   from how many images a set holds. --share-0/1 split the width in proportion to how
+   wide each set's pictures are, so every picture's smaller side is the same length and
+   both sets are judged at one scale; a taller method's images are shown taller, not
+   squashed. */
+.sets { display: grid; grid-template-columns: var(--share-0, 1fr) var(--share-1, 1fr); gap: clamp(12px, 2vw, 22px); align-items: start; margin: 0 0 6px; }
 .set { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 10px; min-width: 0; }
 .set__h { font-family: var(--ui); font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
           margin: 0 0 8px 2px; }
@@ -215,7 +217,8 @@ a { color: var(--accent); }
    In landscape there is the width to keep them side by side, as on a desktop. */
 @media (max-width: 760px) and (orientation: portrait) {
   .sets { grid-template-columns: 1fr; gap: 10px; }
-  .set { padding: 8px; }
+  /* Stacked, the narrower set is narrowed by --fit so the one scale still holds. */
+  .set { padding: 8px; width: var(--fit, 100%); justify-self: center; }
 }
 @media (max-width: 760px) {
   .bar__mark { display: none; }

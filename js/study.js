@@ -223,19 +223,36 @@
 
   function columnsFor(count) { return Math.max(1, Math.ceil(Math.sqrt(count))); }
 
+  /* How much wider than square a set's widest picture is. Never below 1: a tall
+     picture is narrowed by tallScale instead. */
+  function widthOf(option) {
+    return option.images.reduce(function (most, picture) {
+      return Math.max(most, picture.w / picture.h);
+    }, 1);
+  }
+
   function renderSets(entry, focus) {
     var count = entry.item.combinations.length;
     var columns = columnsFor(count);
-    /* Roughly how wide one thumbnail is drawn, so the browser fetches the smaller
-       file unless the screen really needs the full one. */
-    var sizes = "(max-width: 760px) and (orientation: portrait) calc(100vw / " + columns + "), " +
-      "calc(min(100vw, 1180px) / " + (2 * columns) + ")";
+    /* Each set gets page width in proportion to how wide its pictures are, so a wide
+       picture's height (its smaller side) matches the side of a square one. */
+    var widths = SIDES.map(function (label, side) { return widthOf(optionAt(entry, side)); });
+    var total = widths[0] + widths[1];
+    var widest = Math.max(widths[0], widths[1]);
 
     var sets = el("div", "sets");
     sets.style.setProperty("--cols", String(columns));
     SIDES.forEach(function (label, side) {
       var option = optionAt(entry, side);
+      var share = widths[side] / total;
+      var fit = widths[side] / widest;
+      sets.style.setProperty("--share-" + side, widths[side] + "fr");
+      /* Roughly how wide one thumbnail is drawn, so the browser fetches the smaller
+         file unless the screen really needs the full one. */
+      var sizes = "(max-width: 760px) and (orientation: portrait) calc(100vw * " + fit + " / " + columns + "), " +
+        "calc(min(100vw, 1180px) * " + share + " / " + columns + ")";
       var group = el("section", "set");
+      group.style.setProperty("--fit", (100 * fit) + "%");
       group.dataset.side = label;
       group.setAttribute("aria-label", "Set " + label);
       group.appendChild(el("h2", "set__h", "Set " + label));
