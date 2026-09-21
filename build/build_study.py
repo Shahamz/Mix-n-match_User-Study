@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import random
 import shutil
 from collections import Counter, defaultdict
@@ -39,9 +40,7 @@ from PIL import Image
 
 PATCH = 16                  # Mix_n_match/macros.py: PATCH_SIZE_PIXELS
 
-# tiled-diffusion/crop_output.py: UNCOVERED_COLOUR. Reused for the naive baseline,
-# whose config rectangles do not always tile the canvas and which generates no
-# background image to fill what they leave.
+# tiled-diffusion/crop_output.py: UNCOVERED_COLOUR.
 UNCOVERED = (0, 0, 0)
 SETS = ("static", "dynamic")
 # A config set lives in configs_for_baseline_<name>/, and its runs in folders of the same name. <name> is a
@@ -363,10 +362,8 @@ def render_composite(entry, method, combination, mat):
 
     mix_n_match         pastes each region tile at its own bounding box through its alpha
     regional_prompting  pastes its background region, then each config rectangle on top
-    mnm_baseline        resizes each whole-canvas image into its config rectangle and
-                        pastes it at that rectangle's (x, y); whatever the rectangles
-                        leave uncovered stays black, because the baseline generates no
-                        background image
+    mnm_baseline        its whole images side by side, unresized, in a near-square grid
+                        (see gallery); empty cells get the mat
     tiled_diffusion     reproduces crop_output.compose_combination exactly, from
                         run_meta.json: its own canvas, each tile at its placed box
     """
@@ -406,17 +403,13 @@ def render_composite(entry, method, combination, mat):
         return canvas
 
     if method == "mnm_baseline":
-        canvas = Image.new("RGB", (width, height), UNCOVERED)
-        for crop_index, crop in enumerate(entry.config["crops"]):
+        images = []
+        for crop_index in reading_order(entry):
             source = tile_source(entry, method, crop_index, combination[crop_index])
             if source is None:
                 return None
-            whole = open_rgba(source).convert("RGB")
-            box = (crop["width"], crop["height"])
-            if whole.size != box:
-                whole = whole.resize(box, Image.LANCZOS)
-            canvas.paste(whole, (crop["x"], crop["y"]))
-        return canvas
+            images.append(open_rgba(source).convert("RGB"))
+        return gallery(images, mat)
 
     # tiled_diffusion
     places = tiled_diffusion_layout(entry)
@@ -437,6 +430,36 @@ def render_composite(entry, method, combination, mat):
             tile = tile.resize(box, Image.LANCZOS)
         canvas.paste(tile, (place["placed_x"], place["placed_y"]))
     return canvas
+
+
+def reading_order(entry):
+    """Crop indices ordered by their config rectangles: top to bottom, then left to right."""
+    crops = entry.config["crops"]
+    return sorted(range(len(crops)), key=lambda index: (crops[index]["y"], crops[index]["x"]))
+
+
+def gallery(images, mat):
+    """
+    The naive baseline's whole images, each kept intact and unresized, in a near-square
+    grid of ceil(sqrt(n)) columns, then the whole grid halved.
+
+    The baseline generates one plain image per prompt and knows nothing of the layout,
+    so squeezing those images into the config's rectangles would distort them and leave
+    black wherever the rectangles do not reach. Shown whole, the only thing it can lose
+    on is what it really lacks: composition. Near-square rather than a strip, so that
+    no image is lost to a scorer's centre crop. Cells the images do not fill (3, 5, 7
+    or 8 crops) get the mat: no picture there, rather than a black part of one.
+    """
+    columns = math.ceil(math.sqrt(len(images)))
+    rows = math.ceil(len(images) / columns)
+    cell_w = max(image.width for image in images)
+    cell_h = max(image.height for image in images)
+    canvas = Image.new("RGB", (columns * cell_w, rows * cell_h), mat)
+    for index, image in enumerate(images):
+        row, column = divmod(index, columns)
+        canvas.paste(image, (column * cell_w + (cell_w - image.width) // 2,
+                             row * cell_h + (cell_h - image.height) // 2))
+    return canvas.resize((canvas.width // 2, canvas.height // 2), Image.LANCZOS)
 
 
 def tiled_diffusion_layout(entry):
@@ -496,9 +519,7 @@ def composite_capable(entry, method, settings, allow_approximate):
         return True, ""
 
     if method == "mnm_baseline":
-        # Assembled from the config's rectangles. Where they do not tile the canvas the
-        # remainder stays black: the baseline generates no background image, and that
-        # absence is a real property of the method rather than a gap in the data.
+        # A grid of its whole images, independent of the config's geometry.
         return True, ""
 
     # tiled_diffusion: its own chain layout, independent of the config's geometry.

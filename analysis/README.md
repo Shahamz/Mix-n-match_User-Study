@@ -106,12 +106,12 @@ table.
   is `1024 × 1024·n` — taller than our square canvas. Both images in a pair are shown
   at the same width, so its greater height is visible to the participant. Whether
   that aspect difference influenced judgements is worth acknowledging.
-- **The naive baseline's images contain black areas on some configs.** It is
-  assembled from the config's crop rectangles, and on 44 of the 50 dynamic configs
-  those rectangles do not tile the canvas (median 48% uncovered). The baseline
-  generates no background image, so that area is black. This is a real property of
-  the method, not missing data, but it is conspicuous and will have influenced the
-  seamlessness judgements in particular. The `cropping set` breakdown separates it.
+- **The naive baseline is shown as a grid of whole images, not one canvas.** It
+  generates one plain image per prompt and knows nothing of the layout, so each is
+  shown intact and unresized, in a near-square grid (halved to size). That is its
+  real output, undistorted, but it plainly reads as separate pictures, which will
+  have shaped the seamlessness and coherence judgements in particular. With 3, 5, 7
+  or 8 crops the grid has empty cells, filled with the neutral mat.
 - **Regions are not pixel-identical across methods.** Mix-n-match solves its own
   regions with `MRF_alpha`; the baselines use the config's rectangles. A pair is
   matched on *the set of descriptions being illustrated*, not on identical geometry.

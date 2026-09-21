@@ -183,7 +183,7 @@ method itself would:
 |---|---|---|
 | Mix-n-match | Its own `crop_map` from `tiles/layout.json`; each RGBA region tile pasted at its bounding box through its alpha | 1024×1024 |
 | Regional Prompting | Its background region, then each config rectangle pasted at `(x, y)` | 1024×1024 |
-| Naive baseline | Each whole-canvas image resized into its config rectangle and pasted at `(x, y)`. Whatever the rectangles leave uncovered stays **black** — the baseline generates no background image | 1024×1024 |
+| Naive baseline | Its whole images, unresized, side by side in a near-square grid of ⌈√n⌉ columns in reading order of the config's crops, then the grid halved. Empty cells (3, 5, 7 or 8 crops) get the neutral mat | 512·⌈√n⌉ wide |
 | Tiled Diffusion | Exactly as `crop_output.compose_combination` does it, using the placement in `run_meta.json`. It generates each region as a 1024² square and chains them vertically | 1024×(1024·n) |
 
 Every image is encoded at the **same width** (plus a smaller thumbnail for the grid), aspect ratio preserved, height

@@ -22,8 +22,8 @@ reference_method: mix_n_match
 # ---------------------------------------------------------------------------
 methods:
   mnm_baseline:
-    # Assembled from the config's crop rectangles. Where they do not tile the canvas
-    # the remainder stays black: the baseline generates no background image.
+    # Its whole images, unresized, in a near-square grid halved to size. Independent
+    # of the config's geometry, so every config works.
     composite_sets: [static, dynamic]
   regional_prompting:
     composite_sets: [static, dynamic]
@@ -33,7 +33,7 @@ methods:
 
 # Kept for the loader; no method currently needs an approximate reconstruction.
 # Tiled Diffusion is rebuilt exactly from its own run_meta.json, and the naive
-# baseline from the config's crop rectangles.
+# baseline is a grid of its whole images.
 allow_approximate_stitching: false
 
 # ---------------------------------------------------------------------------
