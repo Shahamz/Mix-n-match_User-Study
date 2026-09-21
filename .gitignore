@@ -10,3 +10,8 @@
 __pycache__/
 *.pyc
 .DS_Store
+trim_configs.sh
+build_job.sh
+build_dry_run.sh
+*.out
+*.err

@@ -1,20 +1,81 @@
 {
-  "built_at": "2026-09-19T17:13:36+00:00",
-  "root": "/home/shahamzil/Thesis/trajectoryRoPE/Mix-n-match_User-Study/mock_root",
-  "configs": 6,
+  "built_at": "2026-09-21T13:54:36+00:00",
+  "root": "/scratch200/shahamzilber/mix_n_match/Diffusers-private/custom/Mix_n_match/Mix-n-match_User-Study",
+  "configs": 52,
   "problems": [],
   "counts": {
-    "total": 36,
+    "total": 292,
     "by_set": {
-      "static": 18,
-      "dynamic": 18
+      "static": 194,
+      "dynamic": 98
     },
     "by_pair": {
-      "M1 vs M2": 12,
-      "M1 vs M3": 12,
-      "M1 vs M4": 12
+      "M1 vs M2": 88,
+      "M1 vs M3": 100,
+      "M1 vs M4": 104
     },
-    "configs": 6
+    "configs": 52
   },
-  "skipped": {}
+  "skipped": {
+    "static/cfg45_static_config_3": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "static/cfg45_static_config_6": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "static/cfg45_static_config_8": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "static/cfg45_static_config_26": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "static/cfg45_static_config_29": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "static/cfg45_static_config_31": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "static/cfg45_static_config_38": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "static/cfg45_static_config_39": [
+      {
+        "method": "mnm_baseline",
+        "skipped": "no <prefix>_baseline/tiles/ folder"
+      }
+    ],
+    "dynamic/cfg45_dynamic_config_7": [
+      {
+        "method": "regional_prompting",
+        "skipped": "no run folder named after the config prefix"
+      }
+    ],
+    "dynamic/cfg45_dynamic_config_41": [
+      {
+        "method": "regional_prompting",
+        "skipped": "no run folder named after the config prefix"
+      }
+    ]
+  }
 }

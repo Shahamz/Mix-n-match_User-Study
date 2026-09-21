@@ -7,10 +7,10 @@ window.STUDY_CONFIG = {
      See apps_script/Code.gs and the README for the five-minute setup.
      Left empty, the study still runs end to end and offers participants a
      download of their answers instead. */
-  endpoint: "",
+  endpoint: "https://script.google.com/macros/s/AKfycbxQyUEx1XfU4YrPQd0P7VDOwbb-NCftMNaVbMZ03ZaKtKt4EhGADg9w5nylZUf-DgHz/exec",
 
   /* Shown in the header and the browser tab. */
-  name: "Picture comparison study",
+  name: "Mix-and-Match: User Study",
 
   /* Optional. An address participants can write to with questions. Leave empty
      to omit the line entirely rather than publish an address to scrapers. */
