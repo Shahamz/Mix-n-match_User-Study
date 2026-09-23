@@ -53,8 +53,27 @@ of the four criteria.
 
 ### Primary family — 12 tests, Holm-adjusted
 
-Three baselines × four criteria. Exact two-sided binomial test against 0.5 on the
-**decided** judgements, Wilson 95% intervals, Holm–Bonferroni across the twelve.
+Three baselines × four criteria, each a **paired McNemar test clustered by participant**,
+Holm–Bonferroni across the twelve.
+
+*Paired*: every judgement is a direct comparison of the two methods on the same images, so
+a decided judgement is one discordant pair in McNemar's sense; the test asks whether the
+disagreements fall our way more often than chance.
+
+*Clustered*: one participant answers ~30 pairs × 4 criteria, and their judgements are
+correlated, so they are not independent pairs. The cluster totals are summed and the
+variance is estimated from how much participants disagree with each other, rather than
+assumed binomial (Durkalski et al. 2003, `stats.clustered_mcnemar`):
+
+    Z = sum_i (b_i - c_i) / sqrt( sum_i (b_i - c_i)^2 )
+
+with b_i and c_i the wins and losses of participant *i* in that cell. With one judgement
+per participant it reduces to the ordinary sign test. Intervals are **cluster bootstraps
+over participants** (`stats.cluster_bootstrap_rate`).
+
+The unclustered exact binomial p and its Wilson interval remain in `results.csv` as
+`p_unclustered` / `ci_*_unclustered`, for transparency about how much the clustering
+costs. They are anti-conservative and are not what gets quoted.
 
 **Ties are dropped, not split.** A tie says the two images were indistinguishable on
 that criterion, not that one won half of the time; splitting invents comparisons nobody
@@ -76,7 +95,10 @@ without these rules; report both if the conclusion changes.
 ### Target sample
 
 For a true win rate of 0.60, 80% power at α = 0.05 needs ≈194 decided judgements per
-cell. Each participant contributes roughly 10 pairs per baseline × 4 criteria, minus
+cell **if the judgements were independent**. They are not: clustering by participant costs
+power, by roughly the design effect 1 + (m − 1)·ρ, where m is the judgements one person
+contributes to a cell and ρ is how alike their answers are. Treat 194 as a floor and read
+the achieved power column. Each participant contributes roughly 10 pairs per baseline × 4 criteria, minus
 ties, so plan for **at least 25–30 completed sessions**; `summary.md` prints the full
 table.
 
@@ -87,7 +109,7 @@ table.
 | Section | What it answers |
 |---|---|
 | Who is in the analysis | Sample size, exclusions and why |
-| Primary | The twelve pre-registered win rates, Holm-adjusted, with tie rates |
+| Primary | The twelve pre-registered win rates: paired McNemar clustered by participant, Holm-adjusted, with cluster-bootstrap intervals and tie rates |
 | Pooled over the three baselines | Where the advantage is largest across criteria |
 | Paired contrasts (McNemar) | **The strongest evidence here.** All four criteria are answered on the *same* pair of images by the *same* person, so they are exactly paired: this asks whether the advantage on seamlessness really differs from the advantage on coherence, or on prompt alignment. Also, paired by config and by participant, whether the advantage over one baseline differs from another |
 | Overall ranking | Bradley–Terry over every decided judgement, bootstrap intervals |
@@ -121,4 +143,4 @@ table.
 | File | What it is |
 |---|---|
 | `analyze.py` | Loading, quality control, every analysis, the report and figures |
-| `stats.py` | Binomial and McNemar exact tests, Wilson intervals, Holm and BH, Bradley–Terry with bootstrap, Fleiss' κ, Krippendorff's α, power. numpy only |
+| `stats.py` | Binomial and McNemar exact tests, the participant-clustered McNemar and cluster bootstrap, Wilson intervals, Holm and BH, Bradley–Terry with bootstrap, Fleiss' κ, Krippendorff's α, power. numpy only |

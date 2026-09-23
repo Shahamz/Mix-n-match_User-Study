@@ -132,6 +132,80 @@ def mcnemar(b, c, exact=None):
             "method": "chi-square, continuity corrected", "odds_ratio": odds}
 
 
+def clustered_mcnemar(clusters):
+    """
+    McNemar's test when the discordant pairs arrive in clusters, one cluster per participant.
+
+    A judgement here IS a discordant pair: the person saw both methods on the same images and said which
+    won, so a decided judgement is one disagreement between the two. Plain McNemar would then treat a
+    participant's thirty judgements as thirty independent pairs, and the p value would be far too small.
+
+    This is Durkalski et al. (2003): the cluster totals are summed, and the variance is estimated from how
+    much the clusters disagree with each other rather than assumed binomial, which is what makes it robust
+    to whatever the within-participant correlation happens to be.
+
+        Z = sum_i (b_i - c_i) / sqrt( sum_i (b_i - c_i)^2 )
+
+    With one judgement per cluster it reduces to the ordinary sign test, and the more a participant's
+    judgements repeat each other the wider the variance it estimates.
+
+    Args:
+        clusters: iterable of (b_i, c_i) - the wins and the losses of one participant in this cell.
+
+    Returns:
+        Dict with the totals, the number of clusters, the statistic, its two-sided p value and the method.
+        The p value is nan when no cluster disagrees at all, which is when the statistic is undefined.
+    """
+    clusters = [(int(b), int(c)) for b, c in clusters if (b + c) > 0]
+    b_total = sum(b for b, _ in clusters)
+    c_total = sum(c for _, c in clusters)
+    differences = [b - c for b, c in clusters]
+    spread = sum(difference ** 2 for difference in differences)
+    summary = {"b": b_total, "c": c_total, "n_discordant": b_total + c_total,
+               "clusters": len(clusters), "method": "clustered McNemar (Durkalski), by participant"}
+    if not clusters or spread == 0:
+        summary.update(statistic=float("nan"), p_value=float("nan"),
+                       method="undefined (no cluster disagrees)")
+        return summary
+    z = sum(differences) / math.sqrt(spread)
+    summary.update(statistic=z, p_value=2.0 * (1.0 - norm_cdf(abs(z))))
+    return summary
+
+
+def cluster_bootstrap_rate(clusters, draws=2000, confidence=0.95, seed=11):
+    """
+    Confidence interval for a win rate when the judgements come in clusters: participants are resampled
+    with replacement, each bringing all of its judgements, so the interval widens with the correlation
+    between one person's answers instead of ignoring it.
+
+    Args:
+        clusters: iterable of (wins_i, decided_i) per participant.
+        draws: bootstrap draws.
+        confidence: interval mass.
+        seed: seed of the resampling.
+
+    Returns:
+        (low, high), or (nan, nan) when there is nothing to resample.
+    """
+    clusters = [(int(wins), int(decided)) for wins, decided in clusters if decided > 0]
+    if not clusters or draws <= 0:
+        return float("nan"), float("nan")
+    wins = np.array([pair[0] for pair in clusters], dtype=float)
+    decided = np.array([pair[1] for pair in clusters], dtype=float)
+    rng = np.random.default_rng(seed)
+    estimates = []
+    for _ in range(draws):
+        picks = rng.integers(0, len(clusters), len(clusters))
+        total = decided[picks].sum()
+        if total:
+            estimates.append(wins[picks].sum() / total)
+    if not estimates:
+        return float("nan"), float("nan")
+    tail = (1.0 - confidence) / 2.0
+    return (float(np.percentile(estimates, 100 * tail)),
+            float(np.percentile(estimates, 100 * (1.0 - tail))))
+
+
 def chi2_sf(statistic, degrees):
     """Upper tail of the chi-square distribution. Only df 1 and 2 are needed here."""
     if statistic <= 0:

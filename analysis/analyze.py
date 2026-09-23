@@ -41,6 +41,10 @@ PRETTY = {
     "regional_prompting": "Regional Prompting",
     "tiled_diffusion": "Tiled Diffusion",
 }
+# Draws of the cluster bootstrap behind every win rate's interval. Enough for a stable percentile interval,
+# and cheap: a draw is a sum over participants, not a refit.
+BOOTSTRAP_DRAWS = 2000
+
 CRITERION_LABEL = {"overall": "Overall quality", "seamless": "Seamlessness",
                    "coherence": "Overall coherence", "alignment": "Prompt alignment"}
 
@@ -258,21 +262,68 @@ def summarise_cell(counter, label, **extra):
     return row
 
 
+def cluster_tally(records, keyfn):
+    """
+    Args:
+        records: the judgements.
+        keyfn: what makes one cell of the table.
+
+    Returns:
+        {cell: {participant: Counter of outcomes}}, the per-cluster counts the clustered tests need.
+    """
+    counts = defaultdict(lambda: defaultdict(Counter))
+    for record in records:
+        counts[keyfn(record)][record["participant"]][record["outcome"]] += 1
+    return counts
+
+
+def add_clustering(row, by_participant, draws=BOOTSTRAP_DRAWS):
+    """
+    Replaces a cell's unclustered test with the clustered one, keeping the unclustered numbers beside it.
+
+    One participant answers ~30 pairs on 4 criteria, so their judgements are not 120 independent
+    observations. The headline p value is therefore the clustered McNemar over participants and the
+    headline interval is a cluster bootstrap; the binomial p and the Wilson interval stay in the row (and
+    in results.csv) as `p_unclustered` and `ci_*_unclustered`, because they are what the earlier
+    pre-registration named and the difference between them is worth seeing.
+
+    Args:
+        row: the cell from summarise_cell, modified in place.
+        by_participant: {participant: Counter of outcomes} for this cell.
+        draws: cluster bootstrap draws.
+
+    Returns:
+        The same row.
+    """
+    clusters = [(counter["win"], counter["loss"]) for counter in by_participant.values()]
+    test = S.clustered_mcnemar(clusters)
+    low, high = S.cluster_bootstrap_rate([(wins, wins + losses) for wins, losses in clusters], draws=draws)
+    row.update(p_unclustered=row["p_value"], ci_low_unclustered=row["ci_low"],
+               ci_high_unclustered=row["ci_high"],
+               clusters=test["clusters"], statistic=test["statistic"], test=test["method"],
+               p_value=test["p_value"], ci_low=low, ci_high=high)
+    return row
+
+
 def primary(records):
-    """The pre-registered family: each baseline x each criterion."""
+    """The pre-registered family: each baseline x each criterion, clustered by participant."""
     counts = tally(records, lambda r: (r["criterion"], r["opponent"]))
+    clustered = cluster_tally(records, lambda r: (r["criterion"], r["opponent"]))
     rows = []
     for (criterion, opponent), counter in sorted(counts.items()):
-        rows.append(summarise_cell(
+        row = summarise_cell(
             counter,
             "%s vs %s" % (CRITERION_LABEL.get(criterion, criterion), PRETTY[opponent]),
-            criterion=criterion, opponent=opponent))
+            criterion=criterion, opponent=opponent)
+        rows.append(add_clustering(row, clustered[(criterion, opponent)]))
     return rows
 
 
 def by_criterion(records):
     counts = tally(records, lambda r: r["criterion"])
-    return [summarise_cell(counter, CRITERION_LABEL.get(key, key), criterion=key)
+    clustered = cluster_tally(records, lambda r: r["criterion"])
+    return [add_clustering(summarise_cell(counter, CRITERION_LABEL.get(key, key), criterion=key),
+                           clustered[key])
             for key, counter in sorted(counts.items())]
 
 
@@ -648,19 +699,29 @@ def write_csv(out, families):
     with (out / "results.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(["family", "label", "criterion", "opponent", "wins", "losses",
-                         "ties", "decided", "rate", "ci_low", "ci_high", "tie_rate",
-                         "p_value", "p_adjusted"])
+                         "ties", "decided", "participants", "rate", "ci_low", "ci_high", "tie_rate",
+                         "test", "statistic", "p_value", "p_adjusted",
+                         "p_unclustered", "ci_low_unclustered", "ci_high_unclustered"])
+
+        def number(value, digits=4):
+            """A number for the CSV, or an empty cell when it is missing or not defined."""
+            return "" if value is None or value != value else "%.*f" % (digits, value)
+
         for family, rows in families:
             for row in rows:
                 writer.writerow([family, row["label"], row.get("criterion", ""),
                                  row.get("opponent", ""), row["wins"], row["losses"],
-                                 row["ties"], row["n"],
-                                 "%.4f" % row["rate"] if row["n"] else "",
-                                 "%.4f" % row["ci_low"] if row["n"] else "",
-                                 "%.4f" % row["ci_high"] if row["n"] else "",
-                                 "%.4f" % row["tie_rate"] if row["shown"] else "",
-                                 "%.5f" % row["p_value"] if row["n"] else "",
-                                 "%.5f" % row.get("p_adjusted", float("nan"))])
+                                 row["ties"], row["n"], row.get("clusters", ""),
+                                 number(row["rate"]) if row["n"] else "",
+                                 number(row["ci_low"]) if row["n"] else "",
+                                 number(row["ci_high"]) if row["n"] else "",
+                                 number(row["tie_rate"]) if row["shown"] else "",
+                                 row.get("test", ""), number(row.get("statistic"), 3),
+                                 number(row["p_value"], 5) if row["n"] else "",
+                                 number(row.get("p_adjusted", float("nan")), 5),
+                                 number(row.get("p_unclustered"), 5),
+                                 number(row.get("ci_low_unclustered")),
+                                 number(row.get("ci_high_unclustered"))])
 
 
 def main():
@@ -736,25 +797,30 @@ def main():
         row["p_adjusted"] = value
 
     add("## Primary: how often Mix-n-match was preferred\n")
-    add("Pre-registered family of %d tests (each baseline x each criterion), "
-        "Holm-adjusted. Exact two-sided binomial test against 0.5 on the decided "
-        "judgements, with Wilson intervals.\n" % len(primary_rows))
-    add("| comparison | wins | rate | 95% CI | p | Holm p | ties | odds ratio | power |")
+    add("Pre-registered family of %d tests (each baseline x each criterion), Holm-adjusted. Each test is a "
+        "**paired McNemar clustered by participant**: a decided judgement is one disagreement between the two "
+        "methods on the same images, and a participant supplies many of them, so the clusters are summed and "
+        "the variance is taken from how much participants disagree with each other (Durkalski et al. 2003). "
+        "The interval is a cluster bootstrap over participants. The unclustered binomial p and Wilson interval "
+        "are in results.csv; they are narrower and should not be quoted.\n" % len(primary_rows))
+    add("| comparison | wins | rate | 95% CI (clustered) | participants | p (clustered) | Holm p | ties | odds ratio |")
     add("|---|---|---|---|---|---|---|---|---|")
     for row in primary_rows:
         if not row["n"]:
-            add("| %s | no decided judgements | | | | | %d | | |" % (row["label"], row["ties"]))
+            add("| %s | no decided judgements | | | | | | %d | |" % (row["label"], row["ties"]))
             continue
-        add("| %s | %d/%d | %.3f | %.3f-%.3f | %s | %s | %.0f%% | %.2f | %.2f |"
-            % (row["label"], row["wins"], row["n"], row["rate"], row["ci_low"], row["ci_high"],
-               fmt_p(row["p_value"]), fmt_p(row["p_adjusted"]), 100 * row["tie_rate"],
-               row["odds_ratio"], row["power"]))
+        add("| %s | %d/%d | %.3f | %s | %d | %s | %s | %.0f%% | %.2f |"
+            % (row["label"], row["wins"], row["n"], row["rate"],
+               "%.3f-%.3f" % (row["ci_low"], row["ci_high"]) if row["ci_low"] == row["ci_low"] else "n/a",
+               row["clusters"], fmt_p(row["p_value"]), fmt_p(row["p_adjusted"]),
+               100 * row["tie_rate"], row["odds_ratio"]))
     add("")
 
     # -- pooled by criterion ------------------------------------------------ #
     criterion_rows = by_criterion(kept)
     add("## Pooled over the three baselines\n")
-    add("| criterion | wins | rate | 95% CI | p | ties |")
+    add("Same clustered McNemar, with every baseline's judgements in one cell per criterion.\n")
+    add("| criterion | wins | rate | 95% CI (clustered) | p (clustered) | ties |")
     add("|---|---|---|---|---|---|")
     for row in criterion_rows:
         add("| %s | %d/%d | %.3f | %.3f-%.3f | %s | %.0f%% |"
